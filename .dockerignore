@@ -6,3 +6,6 @@ docs
 e2e
 test-results
 playwright-report
+.git
+.superpowers
+*.log
