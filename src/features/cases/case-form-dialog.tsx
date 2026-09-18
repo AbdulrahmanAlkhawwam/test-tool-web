@@ -49,8 +49,9 @@ export function CaseFormDialog({ projectId, modules, testCase, open, onOpenChang
   const onSubmit = form.handleSubmit(async (values) => {
     try {
       const input = toCaseInput(values);
-      const saved = testCase ? await update.mutateAsync({ id: testCase.id, input }) : await create.mutateAsync(input);
-      toast.success(testCase ? `${saved.code} updated` : `${saved.code} created`);
+      if (testCase) await update.mutateAsync({ id: testCase.id, input });
+      else await create.mutateAsync(input);
+      toast.success(testCase ? 'Test case updated' : 'Test case created');
       onOpenChange(false);
     } catch (e) {
       toast.error(e instanceof ApiError ? e.message : 'Could not save the test case');
