@@ -52,13 +52,19 @@ export function ModulesDialog({ projectId, modules, open, onOpenChange }: Module
     }
   }
 
-  async function rename(id: string, current: string, next: string) {
-    if (!next.trim() || next.trim() === current) return;
+  async function rename(id: string, current: string, next: string, input: HTMLInputElement) {
+    const trimmed = next.trim();
+    if (!trimmed) {
+      input.value = current;
+      return;
+    }
+    if (trimmed === current) return;
     try {
-      await update.mutateAsync({ id, input: { name: next.trim() } });
+      await update.mutateAsync({ id, input: { name: trimmed } });
       toast.success('Module renamed');
     } catch (err) {
       toast.error(errorMessage(err, 'Could not rename the module'));
+      input.value = current;
     }
   }
 
@@ -90,7 +96,7 @@ export function ModulesDialog({ projectId, modules, open, onOpenChange }: Module
                 aria-label={`Name of module ${m.code}`}
                 defaultValue={m.name}
                 className="h-8"
-                onBlur={(e) => void rename(m.id, m.name, e.target.value)}
+                onBlur={(e) => void rename(m.id, m.name, e.target.value, e.target)}
               />
               <span className="w-16 shrink-0 text-right text-xs text-muted-foreground">{m.caseCount} cases</span>
               <Button
