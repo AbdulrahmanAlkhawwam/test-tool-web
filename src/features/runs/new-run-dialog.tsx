@@ -60,6 +60,13 @@ export function NewRunDialog({ project }: { project: ProjectDetail }) {
   const error = selectionError(selection);
   const canSubmit = !!name.trim() && !error && !create.isPending;
 
+  function resetForm() {
+    setName(defaultRunName());
+    setBuild('');
+    setEnvironment('');
+    setSelection({ mode: 'ALL', moduleIds: [], priorities: [], caseIds: [] });
+  }
+
   async function submit(e: React.FormEvent) {
     e.preventDefault();
     if (!canSubmit) return;
@@ -82,7 +89,7 @@ export function NewRunDialog({ project }: { project: ProjectDetail }) {
       open={open}
       onOpenChange={(o) => {
         setOpen(o);
-        if (o) setName(defaultRunName());
+        if (o) resetForm();
       }}
     >
       <DialogTrigger asChild>
