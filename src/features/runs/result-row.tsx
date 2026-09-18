@@ -36,6 +36,10 @@ interface ResultRowProps {
   onSave: (patch: ResultPatch) => Promise<unknown>;
   expanded: boolean;
   onExpandedChange: (expanded: boolean) => void;
+  /** Kept mounted (not removed) so its unsaved/saving state survives filtering; hidden visually instead. */
+  hidden?: boolean;
+  /** Reports whether this row has an unsaved, in-flight, or failed change, so a page-level guard can warn before unload. */
+  onDirtyChange?: (resultId: string, dirty: boolean) => void;
 }
 
 function Field({ label, value }: { label: string; value: string | null }) {
@@ -47,7 +51,7 @@ function Field({ label, value }: { label: string; value: string | null }) {
   );
 }
 
-export function ResultRow({ result, readOnly, onSave, expanded, onExpandedChange }: ResultRowProps) {
+export function ResultRow({ result, readOnly, onSave, expanded, onExpandedChange, hidden, onDirtyChange }: ResultRowProps) {
   const id = useId();
   const tc = result.testCase;
   const [status, setStatus] = useState(result.status);
@@ -56,15 +60,28 @@ export function ResultRow({ result, readOnly, onSave, expanded, onExpandedChange
   const actualRef = useRef<HTMLTextAreaElement>(null);
   const notesRef = useRef<HTMLTextAreaElement>(null);
   const autoSave = useAutoSave<ResultPatch>(onSave);
+  const { isDirty } = autoSave;
 
-  // Adopt changes from other testers (refetch) unless the user is editing that field.
-  useEffect(() => setStatus(result.status), [result.status]);
+  // Adopt changes from other testers (refetch) unless the user is editing that field, or has an
+  // unsaved/in-flight/failed change for it — otherwise a stale response can clobber newer text
+  // (spec §8: typed text is never discarded).
   useEffect(() => {
-    if (document.activeElement !== actualRef.current) setActual(result.actualResult ?? '');
-  }, [result.actualResult]);
+    if (!isDirty('status')) setStatus(result.status);
+  }, [result.status, isDirty]);
   useEffect(() => {
-    if (document.activeElement !== notesRef.current) setNotes(result.notes ?? '');
-  }, [result.notes]);
+    if (document.activeElement !== actualRef.current && !isDirty('actualResult')) setActual(result.actualResult ?? '');
+  }, [result.actualResult, isDirty]);
+  useEffect(() => {
+    if (document.activeElement !== notesRef.current && !isDirty('notes')) setNotes(result.notes ?? '');
+  }, [result.notes, isDirty]);
+
+  const dirty = autoSave.state === 'error' || isDirty('status') || isDirty('actualResult') || isDirty('notes');
+  const onDirtyChangeRef = useRef(onDirtyChange);
+  onDirtyChangeRef.current = onDirtyChange;
+  useEffect(() => {
+    onDirtyChangeRef.current?.(result.id, dirty);
+  }, [dirty, result.id]);
+  useEffect(() => () => onDirtyChangeRef.current?.(result.id, false), [result.id]);
 
   function chooseStatus(next: ResultStatus) {
     setStatus(next);
@@ -72,13 +89,13 @@ export function ResultRow({ result, readOnly, onSave, expanded, onExpandedChange
   }
 
   return (
-    <li className={cn('rounded-lg border border-l-4 bg-card', ROW_ACCENT[status])}>
+    <li hidden={hidden} className={cn('rounded-lg border border-l-4 bg-card', ROW_ACCENT[status])}>
       <div className="flex flex-wrap items-center gap-x-4 gap-y-2 px-4 py-3">
         <button
           type="button"
           className="flex min-w-0 flex-1 items-center gap-3 text-left"
           aria-expanded={expanded}
-          aria-controls={`${id}-body`}
+          aria-controls={expanded ? `${id}-body` : undefined}
           onClick={() => onExpandedChange(!expanded)}
         >
           <ChevronDown className={cn('h-4 w-4 shrink-0 text-muted-foreground transition-transform', expanded && 'rotate-180')} aria-hidden />
@@ -116,7 +133,7 @@ export function ResultRow({ result, readOnly, onSave, expanded, onExpandedChange
           ))}
         </fieldset>
 
-        <div className="flex w-40 flex-col items-end text-right">
+        <div className="flex w-40 flex-col items-end text-right" aria-live="polite">
           <SaveIndicator state={autoSave.state} onRetry={() => void autoSave.retry()} />
           {result.executedBy && (
             <span className="text-xs text-muted-foreground">

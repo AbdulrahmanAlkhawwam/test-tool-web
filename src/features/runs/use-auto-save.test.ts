@@ -78,4 +78,32 @@ describe('useAutoSave', () => {
     unmount();
     expect(save).toHaveBeenCalledWith({ notes: 'unsent' });
   });
+
+  it('isDirty is true while queued, true while in flight, false after success, and true again after failure', async () => {
+    let resolveSave: (() => void) | undefined;
+    const save = vi.fn(
+      () =>
+        new Promise<void>((resolve) => {
+          resolveSave = resolve;
+        }),
+    );
+    const { result } = renderHook(() => useAutoSave<Patch>(save));
+
+    act(() => result.current.queue({ actualResult: 'abc' }));
+    expect(result.current.isDirty('actualResult')).toBe(true);
+
+    await act(() => vi.advanceTimersByTimeAsync(800));
+    expect(save).toHaveBeenCalledTimes(1);
+    expect(result.current.isDirty('actualResult')).toBe(true);
+
+    resolveSave?.();
+    await act(() => vi.advanceTimersByTimeAsync(0));
+    expect(result.current.isDirty('actualResult')).toBe(false);
+    expect(result.current.state).toBe('saved');
+
+    save.mockRejectedValueOnce(new Error('offline'));
+    await act(async () => result.current.queue({ actualResult: 'xyz' }, { immediate: true }));
+    expect(result.current.isDirty('actualResult')).toBe(true);
+    expect(result.current.state).toBe('error');
+  });
 });

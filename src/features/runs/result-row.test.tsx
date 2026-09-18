@@ -76,4 +76,26 @@ describe('ResultRow', () => {
     expect(screen.getByRole('radio', { name: 'Passed' })).toBeDisabled();
     expect(screen.getByLabelText('Actual result')).toHaveAttribute('readonly');
   });
+
+  it('does not let a stale cache update (from a slow save) erase newer unsaved text', async () => {
+    // The first save never resolves during this test, standing in for a slow request that is
+    // still in flight when a stale cache write for the same field arrives.
+    const onSave = vi.fn().mockImplementationOnce(() => new Promise(() => undefined));
+    const user = userEvent.setup();
+    const { rerender } = render(<ResultRow result={result} readOnly={false} onSave={onSave} expanded onExpandedChange={() => undefined} />);
+
+    const textarea = screen.getByLabelText('Actual result');
+    await user.type(textarea, 'Opens');
+    await user.tab(); // blur -> immediate flush; save #1 starts and hangs
+    expect(onSave).toHaveBeenCalledWith({ actualResult: 'Opens' });
+
+    await user.type(textarea, ' a new tab');
+    await user.tab(); // blur again while save #1 is still pending
+
+    // Simulate the cache write: a stale response for the earlier text lands and the parent
+    // re-renders this row with the OLDER actualResult.
+    rerender(<ResultRow result={{ ...result, actualResult: 'Opens' }} readOnly={false} onSave={onSave} expanded onExpandedChange={() => undefined} />);
+
+    expect(screen.getByLabelText('Actual result')).toHaveValue('Opens a new tab');
+  });
 });

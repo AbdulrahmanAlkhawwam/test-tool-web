@@ -71,16 +71,21 @@ export function useUpdateResult(runId: string, projectId: string) {
   return useMutation({
     mutationFn: ({ resultId, patch }: { resultId: string; patch: ResultPatch }) =>
       api<RunResult>(`/runs/${runId}/results/${resultId}`, { method: 'PATCH', body: patch }),
+    // An in-flight GET for this run (e.g. a stale focus refetch) must not resolve after this PATCH
+    // and overwrite the fresh cache write below with older values.
+    onMutate: async () => {
+      await queryClient.cancelQueries({ queryKey: runKeys.detail(runId) });
+    },
     onSuccess: (saved) => {
       queryClient.setQueryData<RunDetail>(runKeys.detail(runId), (old) => {
         if (!old) return old;
         const results = old.results.map((r) => (r.id === saved.id ? { ...r, ...saved, testCase: r.testCase } : r));
         return { ...old, results, summary: summarizeResults(results) };
       });
+      // The run list and reports summarize this run's results too, so they still need a refetch.
+      // Project/dashboard counts don't change per result and already refetch on mount/focus.
       void queryClient.invalidateQueries({ queryKey: runKeys.list(projectId) });
       void queryClient.invalidateQueries({ queryKey: ['reports', projectId] });
-      void queryClient.invalidateQueries({ queryKey: projectKeys.all });
-      void queryClient.invalidateQueries({ queryKey: projectKeys.dashboard });
     },
   });
 }

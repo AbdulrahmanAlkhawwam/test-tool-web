@@ -1,6 +1,6 @@
 'use client';
 
-import { useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { EmptyState } from '@/components/page-state';
 import { Button } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
@@ -19,6 +19,9 @@ export function RunExecution({ run }: { run: RunDetail }) {
   // completes afterwards stay in place instead of disappearing (spec §8: nothing hides).
   const [onlyPending, setOnlyPending] = useState<Set<string> | null>(null);
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
+  // Rows with an unsaved, in-flight, or failed change. Never derived from state that triggers a
+  // render on every keystroke — it only needs to be current when beforeunload actually fires.
+  const dirtyIds = useRef<Set<string>>(new Set());
 
   const visible = useMemo(() => {
     const term = search.trim().toLowerCase();
@@ -29,7 +32,24 @@ export function RunExecution({ run }: { run: RunDetail }) {
     });
   }, [run.results, search, onlyPending]);
 
+  const visibleIds = useMemo(() => new Set(visible.map((r) => r.id)), [visible]);
   const allExpanded = visible.length > 0 && visible.every((r) => expanded.has(r.id));
+
+  const handleDirtyChange = useCallback((resultId: string, dirty: boolean) => {
+    if (dirty) dirtyIds.current.add(resultId);
+    else dirtyIds.current.delete(resultId);
+  }, []);
+
+  // Warn before leaving the page while any row still has an unsaved or failed change (spec §8).
+  useEffect(() => {
+    function handleBeforeUnload(e: BeforeUnloadEvent) {
+      if (dirtyIds.current.size === 0) return;
+      e.preventDefault();
+      e.returnValue = '';
+    }
+    window.addEventListener('beforeunload', handleBeforeUnload);
+    return () => window.removeEventListener('beforeunload', handleBeforeUnload);
+  }, []);
 
   return (
     <div className="space-y-4">
@@ -60,29 +80,30 @@ export function RunExecution({ run }: { run: RunDetail }) {
           {allExpanded ? 'Collapse all' : 'Expand all'}
         </Button>
       </div>
-      {visible.length === 0 ? (
-        <EmptyState title="Nothing to show" description="No results match the current filters." />
-      ) : (
-        <ul className="space-y-2">
-          {visible.map((r) => (
-            <ResultRow
-              key={r.id}
-              result={r}
-              readOnly={readOnly}
-              onSave={(patch) => update.mutateAsync({ resultId: r.id, patch })}
-              expanded={expanded.has(r.id)}
-              onExpandedChange={(open) =>
-                setExpanded((prev) => {
-                  const next = new Set(prev);
-                  if (open) next.add(r.id);
-                  else next.delete(r.id);
-                  return next;
-                })
-              }
-            />
-          ))}
-        </ul>
-      )}
+      {visible.length === 0 && <EmptyState title="Nothing to show" description="No results match the current filters." />}
+      {/* Every row stays mounted regardless of the filters above — only visually hidden — so a
+          row's unsaved/saving/failed state isn't lost by unmounting it (spec §8). */}
+      <ul className="space-y-2">
+        {run.results.map((r) => (
+          <ResultRow
+            key={r.id}
+            result={r}
+            readOnly={readOnly}
+            hidden={!visibleIds.has(r.id)}
+            onSave={(patch) => update.mutateAsync({ resultId: r.id, patch })}
+            expanded={expanded.has(r.id)}
+            onExpandedChange={(open) =>
+              setExpanded((prev) => {
+                const next = new Set(prev);
+                if (open) next.add(r.id);
+                else next.delete(r.id);
+                return next;
+              })
+            }
+            onDirtyChange={handleDirtyChange}
+          />
+        ))}
+      </ul>
     </div>
   );
 }
