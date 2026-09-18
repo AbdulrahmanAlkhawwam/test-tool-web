@@ -1,10 +1,19 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { act, render, screen } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import AppLayout from '@/app/(app)/layout';
+import { api } from '@/lib/api';
 import { AuthProvider, useAuth } from './auth-provider';
+
+const replace = vi.fn();
+vi.mock('next/navigation', () => ({
+  useRouter: () => ({ replace, push: vi.fn() }),
+  usePathname: () => '/projects/NINJA/runs/run1',
+}));
 
 const json = (status: number, body: unknown) =>
   new Response(JSON.stringify(body), { status, headers: { 'Content-Type': 'application/json' } });
+const unauthorized = () => json(401, { statusCode: 401, error: 'Unauthorized', message: 'Invalid or expired token' });
 const tess = { id: 'u1', name: 'Tess', email: 'tess@ejad.test', role: 'TESTER' };
 
 let auth: ReturnType<typeof useAuth>;
@@ -13,12 +22,10 @@ function Probe() {
   return <p>{`${auth.status}:${auth.user?.name ?? '-'}`}</p>;
 }
 
-function renderWithProviders() {
+function renderWithProviders(children: React.ReactNode = <Probe />, queryClient = new QueryClient()) {
   return render(
-    <QueryClientProvider client={new QueryClient()}>
-      <AuthProvider>
-        <Probe />
-      </AuthProvider>
+    <QueryClientProvider client={queryClient}>
+      <AuthProvider>{children}</AuthProvider>
     </QueryClientProvider>,
   );
 }
@@ -30,6 +37,7 @@ describe('AuthProvider', () => {
   });
   afterEach(() => {
     fetchMock.mockReset();
+    replace.mockReset();
     vi.unstubAllGlobals();
   });
 
@@ -52,5 +60,61 @@ describe('AuthProvider', () => {
     fetchMock.mockResolvedValueOnce(new Response(null, { status: 204 }));
     await act(() => auth.logout());
     expect(screen.getByText('unauthenticated:-')).toBeInTheDocument();
+  });
+
+  it('marks a signed-in session as expired and clears cached data when renewal is rejected', async () => {
+    const queryClient = new QueryClient();
+    queryClient.setQueryData(['projects'], [{ id: 'p1' }]);
+    fetchMock.mockResolvedValueOnce(json(200, { accessToken: 't', user: tess }));
+    renderWithProviders(<Probe />, queryClient);
+    expect(await screen.findByText('authenticated:Tess')).toBeInTheDocument();
+
+    fetchMock.mockResolvedValueOnce(unauthorized()).mockResolvedValueOnce(unauthorized());
+    await act(() => api('/projects').catch(() => undefined));
+    expect(screen.getByText('expired:Tess')).toBeInTheDocument();
+    expect(queryClient.getQueryData(['projects'])).toBeUndefined();
+  });
+
+  it('stays signed in when renewal fails for a transient reason', async () => {
+    fetchMock.mockResolvedValueOnce(json(200, { accessToken: 't', user: tess }));
+    renderWithProviders();
+    expect(await screen.findByText('authenticated:Tess')).toBeInTheDocument();
+
+    fetchMock.mockResolvedValueOnce(unauthorized()).mockRejectedValueOnce(new TypeError('Failed to fetch'));
+    await act(() => api('/projects').catch(() => undefined));
+    expect(screen.getByText('authenticated:Tess')).toBeInTheDocument();
+  });
+});
+
+describe('AppLayout', () => {
+  const fetchMock = vi.fn();
+  beforeEach(() => {
+    vi.stubGlobal('fetch', fetchMock);
+  });
+  afterEach(() => {
+    fetchMock.mockReset();
+    replace.mockReset();
+    vi.unstubAllGlobals();
+  });
+
+  it('keeps the page mounted and asks to sign in again when the session expires', async () => {
+    fetchMock.mockResolvedValueOnce(json(200, { accessToken: 't', user: tess }));
+    renderWithProviders(
+      <AppLayout>
+        <textarea aria-label="Actual result" defaultValue="Unsaved text" />
+      </AppLayout>,
+    );
+    expect(await screen.findByLabelText('Actual result')).toHaveValue('Unsaved text');
+
+    fetchMock.mockResolvedValueOnce(unauthorized()).mockResolvedValueOnce(unauthorized());
+    await act(() => api('/projects').catch(() => undefined));
+
+    expect(screen.getByRole('alert')).toHaveTextContent('Your session expired – sign in again.');
+    expect(screen.getByRole('link', { name: 'Sign in again' })).toHaveAttribute(
+      'href',
+      `/login?next=${encodeURIComponent('/projects/NINJA/runs/run1')}`,
+    );
+    expect(screen.getByLabelText('Actual result')).toHaveValue('Unsaved text');
+    expect(replace).not.toHaveBeenCalled();
   });
 });

@@ -5,7 +5,8 @@ import { createContext, useCallback, useContext, useEffect, useMemo, useState } 
 import { api, refreshSession, setAccessToken, setSessionExpiredHandler } from '@/lib/api';
 import type { AuthUser } from '@/lib/types';
 
-type AuthStatus = 'loading' | 'authenticated' | 'unauthenticated';
+/** `expired`: the user was signed in, but the session could not be renewed and they must sign in again. */
+export type AuthStatus = 'loading' | 'authenticated' | 'expired' | 'unauthenticated';
 
 interface AuthContextValue {
   status: AuthStatus;
@@ -24,8 +25,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   useEffect(() => {
     setSessionExpiredHandler(() => {
-      setUser(null);
-      setStatus('unauthenticated');
+      // Don't keep the previous user's data around for whoever signs in next. Mounted queries keep
+      // their last result, so an open page (and any unsaved text on it) stays on screen.
+      queryClient.clear();
+      // While signed in, keep the app mounted and let the layout ask the user to sign in again
+      // instead of tearing the page down (spec §8: typed text is never discarded).
+      setStatus((prev) => (prev === 'authenticated' || prev === 'expired' ? 'expired' : 'unauthenticated'));
     });
     refreshSession()
       .then((u) => {
@@ -34,7 +39,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       })
       .catch(() => setStatus('unauthenticated'));
     return () => setSessionExpiredHandler(null);
-  }, []);
+  }, [queryClient]);
 
   const login = useCallback(async (email: string, password: string) => {
     const data = await api<{ accessToken: string; user: AuthUser }>('/auth/login', {

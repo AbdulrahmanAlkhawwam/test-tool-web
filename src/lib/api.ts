@@ -89,9 +89,15 @@ async function authorizedFetch(path: string, opts: RequestOptions): Promise<Resp
   if (res.status === 401 && !path.startsWith('/auth/')) {
     try {
       await refreshSession();
-    } catch {
-      onSessionExpired?.();
-      throw await toError(res);
+    } catch (e) {
+      // Only a rejected refresh token means the session is over. A network error or 5xx while
+      // refreshing is transient: fail this call like any other so callers keep their state
+      // (e.g. unsaved result text) and can retry.
+      if (e instanceof ApiError && (e.status === 401 || e.status === 403)) {
+        onSessionExpired?.();
+        throw await toError(res);
+      }
+      throw new Error('Could not renew your session. Check your connection and try again.');
     }
     res = await send(path, opts);
   }
@@ -117,5 +123,6 @@ export async function download(path: string, fallbackName: string): Promise<void
   document.body.appendChild(link);
   link.click();
   link.remove();
-  URL.revokeObjectURL(url);
+  // Revoking synchronously can cancel the download in some browsers before it has started.
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
 }

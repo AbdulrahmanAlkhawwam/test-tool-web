@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { api, ApiError, setAccessToken, setSessionExpiredHandler } from './api';
+import { api, ApiError, download, setAccessToken, setSessionExpiredHandler } from './api';
 
 const json = (status: number, body: unknown) =>
   new Response(JSON.stringify(body), { status, headers: { 'Content-Type': 'application/json' } });
@@ -87,6 +87,61 @@ describe('api client', () => {
     fetchMock.mockResolvedValueOnce(unauthorized()).mockResolvedValueOnce(unauthorized());
     await expect(api('/projects')).rejects.toMatchObject({ status: 401 });
     expect(expired).toHaveBeenCalledOnce();
+  });
+
+  it('reports an expired session when refresh is forbidden', async () => {
+    const expired = vi.fn();
+    setSessionExpiredHandler(expired);
+    fetchMock
+      .mockResolvedValueOnce(unauthorized())
+      .mockResolvedValueOnce(json(403, { statusCode: 403, error: 'Forbidden', message: 'Account disabled' }));
+    await expect(api('/projects')).rejects.toMatchObject({ status: 401 });
+    expect(expired).toHaveBeenCalledOnce();
+  });
+
+  it('keeps the session when refresh fails with a server error', async () => {
+    const expired = vi.fn();
+    setSessionExpiredHandler(expired);
+    fetchMock
+      .mockResolvedValueOnce(unauthorized())
+      .mockResolvedValueOnce(json(500, { statusCode: 500, error: 'Internal Server Error', message: 'Boom' }));
+    const err = await api('/projects').catch((e: unknown) => e);
+    expect(err).toBeInstanceOf(Error);
+    expect(err).not.toBeInstanceOf(ApiError);
+    expect(expired).not.toHaveBeenCalled();
+  });
+
+  it('keeps the session when the refresh request cannot reach the server', async () => {
+    const expired = vi.fn();
+    setSessionExpiredHandler(expired);
+    fetchMock.mockResolvedValueOnce(unauthorized()).mockRejectedValueOnce(new TypeError('Failed to fetch'));
+    await expect(api('/projects')).rejects.toThrow('Could not renew your session');
+    expect(expired).not.toHaveBeenCalled();
+  });
+
+  it('revokes a downloaded file URL only after the download has started', async () => {
+    const urlStatics = URL as unknown as Record<string, unknown>;
+    const original = { create: urlStatics.createObjectURL, revoke: urlStatics.revokeObjectURL };
+    const revokeObjectURL = vi.fn();
+    urlStatics.createObjectURL = vi.fn(() => 'blob:export');
+    urlStatics.revokeObjectURL = revokeObjectURL;
+    const click = vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(() => undefined);
+    fetchMock.mockResolvedValueOnce(
+      new Response('xlsx', { status: 200, headers: { 'Content-Disposition': 'attachment; filename="NINJA.xlsx"' } }),
+    );
+    try {
+      vi.useFakeTimers();
+      await download('/projects/p1/export', 'fallback.xlsx');
+      expect(click).toHaveBeenCalledOnce();
+      expect(revokeObjectURL).not.toHaveBeenCalled();
+      vi.advanceTimersByTime(1000);
+      expect(revokeObjectURL).toHaveBeenCalledWith('blob:export');
+    } finally {
+      vi.useRealTimers();
+      click.mockRestore();
+      urlStatics.createObjectURL = original.create;
+      urlStatics.revokeObjectURL = original.revoke;
+    }
   });
 
   it('never refreshes for auth endpoints', async () => {
