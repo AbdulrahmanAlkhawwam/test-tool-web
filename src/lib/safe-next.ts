@@ -11,6 +11,9 @@ export function safeNext(next: string | null | undefined, origin: string = windo
   try {
     const url = new URL(next, origin);
     if (url.origin !== new URL(origin).origin) return '/';
+    // Validate what is returned, not only the input: resolving collapses dot segments, so
+    // `/.//evil.com` or `/a/..//evil.com` would otherwise come back as `//evil.com`.
+    if (url.pathname.startsWith('//') || url.pathname.includes('\\')) return '/';
     return `${url.pathname}${url.search}${url.hash}`;
   } catch {
     return '/';

@@ -3,6 +3,7 @@ import { act, render, screen } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import AppLayout from '@/app/(app)/layout';
 import { api } from '@/lib/api';
+import { safeNext } from '@/lib/safe-next';
 import { AuthProvider, useAuth } from './auth-provider';
 
 const replace = vi.fn();
@@ -98,6 +99,8 @@ describe('AppLayout', () => {
   });
 
   it('keeps the page mounted and asks to sign in again when the session expires', async () => {
+    const here = '/projects/NINJA/runs/run1?q=login';
+    window.history.pushState({}, '', here);
     fetchMock.mockResolvedValueOnce(json(200, { accessToken: 't', user: tess }));
     renderWithProviders(
       <AppLayout>
@@ -110,10 +113,10 @@ describe('AppLayout', () => {
     await act(() => api('/projects').catch(() => undefined));
 
     expect(screen.getByRole('alert')).toHaveTextContent('Your session expired – sign in again.');
-    expect(screen.getByRole('link', { name: 'Sign in again' })).toHaveAttribute(
-      'href',
-      `/login?next=${encodeURIComponent('/projects/NINJA/runs/run1')}`,
-    );
+    const href = screen.getByRole('link', { name: 'Sign in again' }).getAttribute('href') ?? '';
+    expect(href).toBe(`/login?next=${encodeURIComponent(here)}`);
+    // The login page reads it back through searchParams + safeNext and lands on the same place.
+    expect(safeNext(new URL(href, window.location.origin).searchParams.get('next'))).toBe(here);
     expect(screen.getByLabelText('Actual result')).toHaveValue('Unsaved text');
     expect(replace).not.toHaveBeenCalled();
   });

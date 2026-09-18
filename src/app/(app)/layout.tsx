@@ -17,6 +17,11 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
     if (status === 'unauthenticated') router.replace(loginHref);
   }, [status, router, loginHref]);
 
+  // `expired` only ever happens in the browser, so reading window here can't break hydration (and
+  // avoids useSearchParams, which would force a Suspense boundary around every app page).
+  const reloginHref =
+    status === 'expired' ? `/login?next=${encodeURIComponent(`${window.location.pathname}${window.location.search}`)}` : loginHref;
+
   if (status !== 'authenticated' && status !== 'expired') return <LoadingState label="Checking your session…" />;
   return (
     <div className="min-h-screen bg-muted/30">
@@ -29,7 +34,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
             <p className="text-muted-foreground">Changes can&apos;t be saved until you do.</p>
             {/* A full page load (not client navigation) so the unsaved-changes warning still fires. */}
             <Button asChild size="sm" className="ml-auto">
-              <a href={loginHref}>Sign in again</a>
+              <a href={reloginHref}>Sign in again</a>
             </Button>
           </div>
         </div>
