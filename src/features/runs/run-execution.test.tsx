@@ -106,6 +106,40 @@ describe('RunExecution', () => {
     expect(logoutRow).toHaveAttribute('hidden');
   });
 
+  it('blocks completing the run while a result is still saving', async () => {
+    const results = [makeResult({ id: 'r1', code: 'TC-1', name: 'Login flow' }), makeResult({ id: 'r2', code: 'TC-2', name: 'Logout flow' })];
+    // The result save never finishes during this test.
+    fetchMock.mockImplementation(() => new Promise(() => undefined));
+    const user = userEvent.setup();
+    renderExecution(makeRun(results));
+
+    const row1 = screen.getByText('TC-1').closest('li') as HTMLElement;
+    await user.click(within(row1).getByRole('radio', { name: 'Passed' }));
+    expect(within(row1).getByText('Saving…')).toBeInTheDocument();
+
+    await user.click(screen.getByRole('button', { name: 'Complete run' }));
+    const dialog = await screen.findByRole('alertdialog');
+    expect(dialog).toHaveTextContent('1 result has unsaved changes – wait for it to save before completing.');
+    expect(within(dialog).getByRole('button', { name: 'Complete run' })).toBeDisabled();
+    expect(fetchMock.mock.calls.filter(([url]) => String(url).endsWith('/runs/run1'))).toHaveLength(0);
+  });
+
+  it('allows completing the run once every result is saved', async () => {
+    const results = [makeResult({ id: 'r1', code: 'TC-1', name: 'Login flow' })];
+    fetchMock.mockResolvedValue(json(200, { ...results[0], status: 'PASSED' }));
+    const user = userEvent.setup();
+    renderExecution(makeRun(results));
+
+    const row1 = screen.getByText('TC-1').closest('li') as HTMLElement;
+    await user.click(within(row1).getByRole('radio', { name: 'Passed' }));
+    expect(await within(row1).findByText('Saved ✓')).toBeInTheDocument();
+
+    await user.click(screen.getByRole('button', { name: 'Complete run' }));
+    const dialog = await screen.findByRole('alertdialog');
+    expect(dialog).not.toHaveTextContent('unsaved changes');
+    expect(within(dialog).getByRole('button', { name: 'Complete run' })).toBeEnabled();
+  });
+
   it('keeps a row visible after marking it Passed while "Only not executed" is on', async () => {
     const results = [
       makeResult({ id: 'r1', status: 'NOT_EXECUTED', code: 'TC-1', name: 'Login flow' }),

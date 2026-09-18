@@ -19,10 +19,22 @@ interface ConfirmDialogProps {
   confirmLabel: string;
   destructive?: boolean;
   pending?: boolean;
+  /** Disables only the confirm button (e.g. while something must finish first); Cancel stays usable. */
+  confirmDisabled?: boolean;
   onConfirm: () => void;
 }
 
-export function ConfirmDialog({ open, onOpenChange, title, description, confirmLabel, destructive, pending, onConfirm }: ConfirmDialogProps) {
+export function ConfirmDialog({
+  open,
+  onOpenChange,
+  title,
+  description,
+  confirmLabel,
+  destructive,
+  pending,
+  confirmDisabled,
+  onConfirm,
+}: ConfirmDialogProps) {
   return (
     <AlertDialog open={open} onOpenChange={onOpenChange}>
       <AlertDialogContent>
@@ -32,7 +44,7 @@ export function ConfirmDialog({ open, onOpenChange, title, description, confirmL
         </AlertDialogHeader>
         <AlertDialogFooter>
           <AlertDialogCancel disabled={pending}>Cancel</AlertDialogCancel>
-          <Button variant={destructive ? 'destructive' : 'default'} disabled={pending} onClick={onConfirm}>
+          <Button variant={destructive ? 'destructive' : 'default'} disabled={pending || confirmDisabled} onClick={onConfirm}>
             {pending ? 'Working…' : confirmLabel}
           </Button>
         </AlertDialogFooter>

@@ -12,13 +12,16 @@ import { formatDateTime } from '@/lib/format';
 import type { RunDetail } from '@/lib/types';
 import { useUpdateRun } from './api';
 
-export function RunHeader({ run }: { run: RunDetail }) {
+/** `unsavedCount`: results with an unsaved, in-flight or failed change — completing would lock them out. */
+export function RunHeader({ run, unsavedCount = 0 }: { run: RunDetail; unsavedCount?: number }) {
   const complete = useUpdateRun(run.projectId);
   const [confirmOpen, setConfirmOpen] = useState(false);
   const [exporting, setExporting] = useState(false);
   const s = run.summary;
+  const blocked = unsavedCount > 0;
 
   async function completeRun() {
+    if (blocked) return;
     try {
       await complete.mutateAsync({ id: run.id, input: { status: 'COMPLETED' } });
       toast.success('Run completed');
@@ -85,12 +88,15 @@ export function RunHeader({ run }: { run: RunDetail }) {
         onOpenChange={setConfirmOpen}
         title="Complete this run?"
         description={
-          s.notExecuted > 0
+          blocked
+            ? `${unsavedCount} result${unsavedCount === 1 ? ' has' : 's have'} unsaved changes – wait for ${unsavedCount === 1 ? 'it' : 'them'} to save before completing.`
+            : s.notExecuted > 0
             ? `${s.notExecuted} test case${s.notExecuted === 1 ? ' is' : 's are'} still Not Executed. Completing locks all results.`
             : 'Completing locks all results. They can no longer be changed.'
         }
         confirmLabel="Complete run"
         pending={complete.isPending}
+        confirmDisabled={blocked}
         onConfirm={() => void completeRun()}
       />
     </div>

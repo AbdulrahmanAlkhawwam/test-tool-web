@@ -19,9 +19,11 @@ export function RunExecution({ run }: { run: RunDetail }) {
   // completes afterwards stay in place instead of disappearing (spec §8: nothing hides).
   const [onlyPending, setOnlyPending] = useState<Set<string> | null>(null);
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
-  // Rows with an unsaved, in-flight, or failed change. Never derived from state that triggers a
-  // render on every keystroke — it only needs to be current when beforeunload actually fires.
+  // Rows with an unsaved, in-flight, or failed change. Rows only report when their dirty flag
+  // flips (not on every keystroke), so mirroring the count into state is cheap; the header needs
+  // it reactively to block completing the run while changes are unsaved.
   const dirtyIds = useRef<Set<string>>(new Set());
+  const [dirtyCount, setDirtyCount] = useState(0);
 
   const visible = useMemo(() => {
     const term = search.trim().toLowerCase();
@@ -38,6 +40,7 @@ export function RunExecution({ run }: { run: RunDetail }) {
   const handleDirtyChange = useCallback((resultId: string, dirty: boolean) => {
     if (dirty) dirtyIds.current.add(resultId);
     else dirtyIds.current.delete(resultId);
+    setDirtyCount(dirtyIds.current.size);
   }, []);
 
   // Warn before leaving the page while any row still has an unsaved or failed change (spec §8).
@@ -53,7 +56,7 @@ export function RunExecution({ run }: { run: RunDetail }) {
 
   return (
     <div className="space-y-4">
-      <RunHeader run={run} />
+      <RunHeader run={run} unsavedCount={dirtyCount} />
       {readOnly && (
         <p role="status" className="rounded-md bg-muted px-3 py-2 text-sm text-muted-foreground">
           This run is completed. Results are read-only.
