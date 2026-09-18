@@ -74,6 +74,7 @@ export function useModules(projectId: string) {
   return useQuery({
     queryKey: caseKeys.modules(projectId),
     queryFn: () => api<ModuleSummary[]>(`/projects/${projectId}/modules`),
+    enabled: !!projectId,
   });
 }
 
