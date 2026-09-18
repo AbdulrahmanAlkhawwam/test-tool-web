@@ -3,6 +3,7 @@ import { render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { RunDetail, RunResult } from '@/lib/types';
+import { runKeys } from './api';
 import { RunExecution } from './run-execution';
 import { summarizeResults } from './summary';
 
@@ -68,8 +69,10 @@ function makeRun(results: RunResult[]): RunDetail {
   };
 }
 
-function renderExecution(run: RunDetail) {
-  const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false }, mutations: { retry: false } } });
+function renderExecution(
+  run: RunDetail,
+  queryClient = new QueryClient({ defaultOptions: { queries: { retry: false }, mutations: { retry: false } } }),
+) {
   return render(
     <QueryClientProvider client={queryClient}>
       <RunExecution run={run} />
@@ -81,7 +84,9 @@ describe('RunExecution', () => {
   const fetchMock = vi.fn();
 
   beforeEach(() => {
-    fetchMock.mockResolvedValue(json(200, {}));
+    // A fresh Response per call: a row that unmounts dirty at the end of a test flushes its save
+    // late, and must not consume a body the next test's request needs.
+    fetchMock.mockImplementation(async () => json(200, {}));
     vi.stubGlobal('fetch', fetchMock);
     vi.stubGlobal('ResizeObserver', ResizeObserverStub);
   });
@@ -126,7 +131,7 @@ describe('RunExecution', () => {
 
   it('allows completing the run once every result is saved', async () => {
     const results = [makeResult({ id: 'r1', code: 'TC-1', name: 'Login flow' })];
-    fetchMock.mockResolvedValue(json(200, { ...results[0], status: 'PASSED' }));
+    fetchMock.mockImplementation(async () => json(200, { ...results[0], status: 'PASSED' }));
     const user = userEvent.setup();
     renderExecution(makeRun(results));
 
@@ -140,12 +145,30 @@ describe('RunExecution', () => {
     expect(within(dialog).getByRole('button', { name: 'Complete run' })).toBeEnabled();
   });
 
+  it('refetches the run when a save is rejected because the run was completed meanwhile', async () => {
+    const results = [makeResult({ id: 'r1', code: 'TC-1', name: 'Login flow' })];
+    const run = makeRun(results);
+    const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false }, mutations: { retry: false } } });
+    queryClient.setQueryData(runKeys.detail(run.id), run);
+    fetchMock.mockImplementation(async () => json(409, { statusCode: 409, error: 'Conflict', message: 'Run is completed – results are read-only' }));
+    const user = userEvent.setup();
+    renderExecution(run, queryClient);
+
+    const row1 = screen.getByText('TC-1').closest('li') as HTMLElement;
+    await user.click(within(row1).getByRole('radio', { name: 'Failed' }));
+
+    expect(await within(row1).findByText(/Run is completed – results are read-only/)).toBeInTheDocument();
+    expect(queryClient.getQueryState(runKeys.detail(run.id))?.isInvalidated).toBe(true);
+    expect(within(row1).getByRole('radio', { name: 'Failed' })).toBeChecked();
+    expect(fetchMock).toHaveBeenCalledOnce(); // no automatic retry of a rejected save
+  });
+
   it('keeps a row visible after marking it Passed while "Only not executed" is on', async () => {
     const results = [
       makeResult({ id: 'r1', status: 'NOT_EXECUTED', code: 'TC-1', name: 'Login flow' }),
       makeResult({ id: 'r2', status: 'PASSED', code: 'TC-2', name: 'Logout flow' }),
     ];
-    fetchMock.mockResolvedValue(json(200, { ...results[0], status: 'PASSED' }));
+    fetchMock.mockImplementation(async () => json(200, { ...results[0], status: 'PASSED' }));
     const user = userEvent.setup();
     renderExecution(makeRun(results));
 

@@ -1,6 +1,9 @@
 import { act, renderHook } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { ApiError } from '@/lib/api';
 import { useAutoSave } from './use-auto-save';
+
+const apiError = (status: number, message: string) => new ApiError(status, { statusCode: status, error: 'Error', message });
 
 type Patch = { status: string; actualResult: string; notes: string };
 
@@ -69,6 +72,35 @@ describe('useAutoSave', () => {
     expect(save).toHaveBeenCalledTimes(3);
     expect(save).toHaveBeenLastCalledWith({ status: 'PASSED' });
     expect(result.current.state).toBe('saved');
+  });
+
+  it.each([
+    [409, 'Run is completed – results are read-only'],
+    [400, 'Validation failed'],
+  ])('does not auto-retry a save the server rejected with %i, and exposes the error', async (status, message) => {
+    const rejection = apiError(status, message);
+    const save = vi.fn().mockRejectedValue(rejection);
+    const { result } = renderHook(() => useAutoSave<Patch>(save, { retryDelayMs: 1500 }));
+
+    await act(async () => result.current.queue({ notes: 'Only on Safari' }, { immediate: true }));
+    expect(result.current.state).toBe('error');
+    expect(result.current.error).toBe(rejection);
+
+    await act(() => vi.advanceTimersByTimeAsync(10_000));
+    expect(save).toHaveBeenCalledTimes(1);
+    expect(result.current.isDirty('notes')).toBe(true); // the text is kept for a manual retry
+  });
+
+  it('still auto-retries a save that failed with a server error', async () => {
+    const save = vi.fn().mockRejectedValueOnce(apiError(503, 'Service Unavailable')).mockResolvedValue(undefined);
+    const { result } = renderHook(() => useAutoSave<Patch>(save, { retryDelayMs: 1500 }));
+
+    await act(async () => result.current.queue({ status: 'PASSED' }, { immediate: true }));
+    expect(result.current.state).toBe('error');
+    await act(() => vi.advanceTimersByTimeAsync(1500));
+    expect(save).toHaveBeenCalledTimes(2);
+    expect(result.current.state).toBe('saved');
+    expect(result.current.error).toBeNull();
   });
 
   it('flushes pending changes when the row unmounts', async () => {

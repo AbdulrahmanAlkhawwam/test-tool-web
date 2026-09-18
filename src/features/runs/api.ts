@@ -1,6 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { projectKeys } from '@/features/projects/api';
-import { api } from '@/lib/api';
+import { api, ApiError } from '@/lib/api';
 import type { ResultStatus, RunDetail, RunListItem, RunResult, RunSelection, TestRun } from '@/lib/types';
 import { summarizeResults } from './summary';
 
@@ -86,6 +86,11 @@ export function useUpdateResult(runId: string, projectId: string) {
       // Project/dashboard counts don't change per result and already refetch on mount/focus.
       void queryClient.invalidateQueries({ queryKey: runKeys.list(projectId) });
       void queryClient.invalidateQueries({ queryKey: ['reports', projectId] });
+    },
+    // 409: the run was completed meanwhile (e.g. by another tester). Refetch it so the page turns
+    // read-only; the row keeps the rejected text because that field is still dirty (spec §8).
+    onError: (error) => {
+      if (error instanceof ApiError && error.status === 409) void queryClient.invalidateQueries({ queryKey: runKeys.detail(runId) });
     },
   });
 }

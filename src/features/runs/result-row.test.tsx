@@ -1,6 +1,7 @@
 import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { describe, expect, it, vi } from 'vitest';
+import { ApiError } from '@/lib/api';
 import type { RunResult } from '@/lib/types';
 import { ResultRow } from './result-row';
 
@@ -69,6 +70,24 @@ describe('ResultRow', () => {
     await user.click(retry);
     expect(await screen.findByText('Saved ✓')).toBeInTheDocument();
     expect(onSave).toHaveBeenLastCalledWith({ notes: 'Only on Safari' });
+  });
+
+  it('shows why the server rejected a save and keeps the text', async () => {
+    const onSave = vi
+      .fn()
+      .mockRejectedValue(new ApiError(409, { statusCode: 409, error: 'Conflict', message: 'Run is completed – results are read-only' }));
+    const { user } = setup(onSave);
+    await user.type(screen.getByLabelText('Notes'), 'Only on Safari');
+    await user.tab();
+    expect(await screen.findByText(/Run is completed – results are read-only/)).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Not saved – retry' })).not.toBeInTheDocument();
+    expect(screen.getByLabelText('Notes')).toHaveValue('Only on Safari');
+  });
+
+  it('limits the text fields to what the server accepts', () => {
+    setup();
+    expect(screen.getByLabelText('Actual result')).toHaveAttribute('maxLength', '10000');
+    expect(screen.getByLabelText('Notes')).toHaveAttribute('maxLength', '5000');
   });
 
   it('is read-only for completed runs', () => {

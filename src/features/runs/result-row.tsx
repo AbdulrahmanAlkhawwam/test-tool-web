@@ -134,7 +134,7 @@ export function ResultRow({ result, readOnly, onSave, expanded, onExpandedChange
         </fieldset>
 
         <div className="flex w-40 flex-col items-end text-right" aria-live="polite">
-          <SaveIndicator state={autoSave.state} onRetry={() => void autoSave.retry()} />
+          <SaveIndicator state={autoSave.state} error={autoSave.error} onRetry={() => void autoSave.retry()} />
           {result.executedBy && (
             <span className="text-xs text-muted-foreground">
               {result.executedBy.name} · {formatDateTime(result.executedAt)}
@@ -166,6 +166,7 @@ export function ResultRow({ result, readOnly, onSave, expanded, onExpandedChange
                 id={`${id}-actual`}
                 ref={actualRef}
                 rows={3}
+                maxLength={10000}
                 readOnly={readOnly}
                 placeholder="What actually happened (e.g. Like expected result)"
                 value={actual}
@@ -184,6 +185,7 @@ export function ResultRow({ result, readOnly, onSave, expanded, onExpandedChange
                 id={`${id}-notes`}
                 ref={notesRef}
                 rows={2}
+                maxLength={5000}
                 readOnly={readOnly}
                 value={notes}
                 onChange={(e) => {

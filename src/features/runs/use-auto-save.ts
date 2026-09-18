@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
+import { ApiError } from '@/lib/api';
 
 export type SaveState = 'idle' | 'saving' | 'saved' | 'error';
 
@@ -9,10 +10,13 @@ interface AutoSaveOptions {
 
 /**
  * Collects field changes and saves them: text after `delayMs` of quiet, anything immediately on request.
- * Saves run one at a time. A failed save keeps its fields, retries once automatically, then waits for retry().
+ * Saves run one at a time. A failed save keeps its fields and waits for retry(); a failure that may be
+ * transient (network error, 5xx) is first retried once automatically. A rejection (4xx) is not, since
+ * sending the same patch again would fail the same way — `error` carries it so the reason can be shown.
  */
 export function useAutoSave<P extends object>(save: (patch: Partial<P>) => Promise<unknown>, { delayMs = 800, retryDelayMs = 1500 }: AutoSaveOptions = {}) {
   const [state, setState] = useState<SaveState>('idle');
+  const [error, setError] = useState<unknown>(null);
   const pending = useRef<Partial<P>>({});
   // Fields belonging to the patch currently being sent to `save`; pending is cleared before the
   // request goes out, so isDirty needs this to know a field is still unconfirmed mid-request.
@@ -31,18 +35,20 @@ export function useAutoSave<P extends object>(save: (patch: Partial<P>) => Promi
       pending.current = {};
       inFlightPatch.current = patch;
       setState('saving');
+      setError(null);
 
       const attempt = (async () => {
         try {
           await saveRef.current(patch);
           inFlightPatch.current = {};
           if (!Object.keys(pending.current).length) setState('saved');
-        } catch {
+        } catch (e) {
           // Newer edits made while saving win over the failed patch.
           pending.current = { ...patch, ...pending.current };
           inFlightPatch.current = {};
+          setError(e);
           setState('error');
-          if (autoRetry) {
+          if (autoRetry && isTransient(e)) {
             clearTimeout(timer.current);
             timer.current = setTimeout(() => void flushInternal(false), retryDelayMs);
           }
@@ -78,5 +84,10 @@ export function useAutoSave<P extends object>(save: (patch: Partial<P>) => Promi
   flushRef.current = flush;
   useEffect(() => () => void flushRef.current(), []);
 
-  return { state, queue, flush, retry, isDirty };
+  return { state, error, queue, flush, retry, isDirty };
+}
+
+/** Network errors and server errors may succeed on retry; a 4xx means the server rejected the change. */
+export function isTransient(error: unknown): boolean {
+  return !(error instanceof ApiError && error.status < 500);
 }
