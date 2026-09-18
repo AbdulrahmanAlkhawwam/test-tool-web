@@ -1,7 +1,18 @@
 import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { projectKeys } from '@/features/projects/api';
 import { api } from '@/lib/api';
-import type { ModuleRef, ModuleSummary, Paged, Priority, ResultStatus, TestCase, TestCaseDetail, TestCaseListItem } from '@/lib/types';
+import type {
+  ImportPreview,
+  ImportResult,
+  ModuleRef,
+  ModuleSummary,
+  Paged,
+  Priority,
+  ResultStatus,
+  TestCase,
+  TestCaseDetail,
+  TestCaseListItem,
+} from '@/lib/types';
 import type { CaseInput } from './case-schema';
 
 export interface CaseFilters {
@@ -105,5 +116,32 @@ export function useDeleteModule(projectId: string) {
   return useMutation({
     mutationFn: (id: string) => api<void>(`/modules/${id}`, { method: 'DELETE' }),
     onSuccess: invalidate,
+  });
+}
+
+export function usePreviewImport(projectId: string) {
+  return useMutation({
+    mutationFn: (file: File) => {
+      const form = new FormData();
+      form.append('file', file);
+      return api<ImportPreview>(`/projects/${projectId}/import/preview`, { method: 'POST', body: form });
+    },
+  });
+}
+
+export interface ConfirmImportInput {
+  importId: string;
+  duplicateStrategy: 'skip' | 'update';
+  createImportedRun: boolean;
+  runName?: string;
+}
+
+export function useConfirmImport(projectId: string) {
+  const invalidate = useInvalidateCases(projectId);
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (input: ConfirmImportInput) =>
+      api<ImportResult>(`/projects/${projectId}/import/confirm`, { method: 'POST', body: input }),
+    onSuccess: () => Promise.all([invalidate(), queryClient.invalidateQueries({ queryKey: ['runs', projectId] })]),
   });
 }
