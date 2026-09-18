@@ -1,0 +1,50 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    --background: 0 0% 100%;
+    --foreground: 215 28% 17%;
+    --card: 0 0% 100%;
+    --card-foreground: 215 28% 17%;
+    --popover: 0 0% 100%;
+    --popover-foreground: 215 28% 17%;
+    /* Ejad deep blue, darkened for 4.5:1+ contrast with white text */
+    --primary: 205 52% 38%;
+    --primary-foreground: 0 0% 100%;
+    --secondary: 210 25% 96%;
+    --secondary-foreground: 215 28% 17%;
+    --muted: 210 25% 96%;
+    --muted-foreground: 215 16% 40%;
+    /* Ejad green tint */
+    --accent: 146 63% 94%;
+    --accent-foreground: 147 70% 22%;
+    --destructive: 0 65% 48%;
+    --destructive-foreground: 0 0% 100%;
+    --border: 214 20% 88%;
+    --input: 214 20% 84%;
+    /* Ejad blue */
+    --ring: 204 64% 61%;
+    --radius: 0.5rem;
+
+    --status-passed: 146 63% 55%;
+    --status-passed-fg: 147 70% 24%;
+    --status-failed: 0 72% 58%;
+    --status-failed-fg: 0 70% 38%;
+    --status-blocked: 38 92% 52%;
+    --status-blocked-fg: 30 90% 28%;
+    --status-skipped: 215 16% 62%;
+    --status-skipped-fg: 215 20% 35%;
+    --status-pending: 214 20% 86%;
+    --status-pending-fg: 215 16% 40%;
+  }
+
+  * {
+    @apply border-border;
+  }
+
+  body {
+    @apply bg-background font-sans text-foreground antialiased;
+  }
+}
