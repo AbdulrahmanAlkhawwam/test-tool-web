@@ -30,6 +30,7 @@ export function ImportDialog({ project }: { project: ProjectDetail }) {
     setCreateImportedRun(false);
     setRunName('');
     previewMutation.reset();
+    confirmMutation.reset();
   }
 
   async function onFile(file: File | undefined) {
@@ -64,6 +65,7 @@ export function ImportDialog({ project }: { project: ProjectDetail }) {
     <Dialog
       open={open}
       onOpenChange={(o) => {
+        if (!o && confirmMutation.isPending) return; // don't let an in-flight import be abandoned
         setOpen(o);
         if (!o) reset();
       }}
@@ -90,7 +92,11 @@ export function ImportDialog({ project }: { project: ProjectDetail }) {
               type="file"
               accept=".xlsx,.csv"
               disabled={previewMutation.isPending}
-              onChange={(e) => void onFile(e.target.files?.[0])}
+              onChange={(e) => {
+                const file = e.target.files?.[0];
+                e.target.value = ''; // allow re-selecting the same file after a failed preview
+                void onFile(file);
+              }}
             />
             {previewMutation.isPending && <p className="text-sm text-muted-foreground">Reading file…</p>}
           </div>
@@ -131,7 +137,7 @@ export function ImportDialog({ project }: { project: ProjectDetail }) {
 
         <DialogFooter>
           {preview && (
-            <Button variant="ghost" onClick={reset}>
+            <Button variant="ghost" disabled={confirmMutation.isPending} onClick={reset}>
               Choose another file
             </Button>
           )}
