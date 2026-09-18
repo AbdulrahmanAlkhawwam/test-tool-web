@@ -14,12 +14,14 @@ import { useAutoSave } from './use-auto-save';
 
 const STATUS_CHOICES: ResultStatus[] = ['PASSED', 'FAILED', 'BLOCKED', 'SKIPPED', 'NOT_EXECUTED'];
 
+// Selected chips use the dark `-fg` text on a light tint of the status colour: white text on the
+// saturated status colours falls below WCAG AA contrast.
 const CHOICE_STYLE: Record<ResultStatus, string> = {
-  PASSED: 'peer-checked:bg-status-passed peer-checked:text-white peer-checked:border-status-passed',
-  FAILED: 'peer-checked:bg-status-failed peer-checked:text-white peer-checked:border-status-failed',
-  BLOCKED: 'peer-checked:bg-status-blocked peer-checked:text-white peer-checked:border-status-blocked',
-  SKIPPED: 'peer-checked:bg-status-skipped peer-checked:text-white peer-checked:border-status-skipped',
-  NOT_EXECUTED: 'peer-checked:bg-muted peer-checked:text-foreground peer-checked:border-foreground/30',
+  PASSED: 'peer-checked:bg-status-passed/20 peer-checked:text-status-passed-fg peer-checked:border-status-passed',
+  FAILED: 'peer-checked:bg-status-failed/20 peer-checked:text-status-failed-fg peer-checked:border-status-failed',
+  BLOCKED: 'peer-checked:bg-status-blocked/20 peer-checked:text-status-blocked-fg peer-checked:border-status-blocked',
+  SKIPPED: 'peer-checked:bg-status-skipped/20 peer-checked:text-status-skipped-fg peer-checked:border-status-skipped',
+  NOT_EXECUTED: 'peer-checked:bg-status-pending/60 peer-checked:text-status-pending-fg peer-checked:border-status-pending-fg',
 };
 
 const ROW_ACCENT: Record<ResultStatus, string> = {
@@ -122,7 +124,7 @@ export function ResultRow({ result, readOnly, onSave, expanded, onExpandedChange
               />
               <span
                 className={cn(
-                  'inline-block cursor-pointer rounded-md border px-2 py-1 text-xs transition-colors hover:bg-muted peer-focus-visible:ring-2 peer-focus-visible:ring-ring peer-disabled:cursor-not-allowed peer-disabled:opacity-60',
+                  'inline-block cursor-pointer rounded-md border px-2 py-1 text-xs transition-colors peer-checked:font-medium hover:bg-muted peer-focus-visible:ring-2 peer-focus-visible:ring-ring peer-disabled:cursor-not-allowed peer-disabled:opacity-60',
                   CHOICE_STYLE[choice],
                 )}
                 aria-hidden
