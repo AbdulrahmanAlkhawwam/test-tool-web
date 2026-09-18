@@ -10,6 +10,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { ApiError } from '@/lib/api';
+import { safeNext } from '@/lib/safe-next';
 import { useAuth } from '@/providers/auth-provider';
 
 const schema = z.object({
@@ -18,20 +19,17 @@ const schema = z.object({
 });
 type LoginValues = z.infer<typeof schema>;
 
-function safeNext(next: string | null): string {
-  return next && next.startsWith('/') && !next.startsWith('//') ? next : '/';
-}
-
 function LoginForm() {
   const { status, login } = useAuth();
   const router = useRouter();
-  const next = safeNext(useSearchParams().get('next'));
+  const next = useSearchParams().get('next');
   const [serverError, setServerError] = useState<string | null>(null);
   const form = useForm<LoginValues>({ resolver: zodResolver(schema), defaultValues: { email: '', password: '' } });
   const { errors, isSubmitting } = form.formState;
 
   useEffect(() => {
-    if (status === 'authenticated') router.replace(next);
+    // Resolved here (client only) because safeNext compares against window.location.origin.
+    if (status === 'authenticated') router.replace(safeNext(next));
   }, [status, router, next]);
 
   const onSubmit = form.handleSubmit(async (values) => {
