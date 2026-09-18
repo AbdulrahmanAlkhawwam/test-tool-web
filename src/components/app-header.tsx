@@ -67,7 +67,7 @@ export function AppHeader() {
               <DropdownMenuItem asChild>
                 <Link href="/profile">Profile & password</Link>
               </DropdownMenuItem>
-              <DropdownMenuItem onSelect={() => void logout()}>
+              <DropdownMenuItem onSelect={() => void logout().catch(() => undefined)}>
                 <LogOut className="mr-2 h-4 w-4" aria-hidden />
                 Log out
               </DropdownMenuItem>

@@ -1,7 +1,7 @@
 'use client';
 
 import { FolderCog, Plus } from 'lucide-react';
-import { useCallback, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { toast } from 'sonner';
 import { ConfirmDialog } from '@/components/confirm-dialog';
 import { EmptyState, ErrorState, LoadingState } from '@/components/page-state';
@@ -46,6 +46,14 @@ export function CasesView({ project, actions }: { project: ProjectDetail; action
   }
 
   const data = cases.data;
+
+  // Deleting the last case on the last page leaves that page empty: step back instead of showing
+  // "No test cases found" while earlier pages still have some.
+  const pageOverflow = !!data && data.total > 0 && data.items.length === 0 && filters.page > 1;
+  useEffect(() => {
+    if (pageOverflow) setFilters((f) => ({ ...f, page: f.page - 1 }));
+  }, [pageOverflow]);
+
   const from = data && data.total ? (data.page - 1) * data.pageSize + 1 : 0;
   const to = data ? Math.min(data.page * data.pageSize, data.total) : 0;
 
