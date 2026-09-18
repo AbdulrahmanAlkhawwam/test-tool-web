@@ -1,7 +1,8 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { projectKeys } from '@/features/projects/api';
 import { api } from '@/lib/api';
-import type { RunDetail, RunListItem, RunSelection, TestRun } from '@/lib/types';
+import type { ResultStatus, RunDetail, RunListItem, RunResult, RunSelection, TestRun } from '@/lib/types';
+import { summarizeResults } from './summary';
 
 export const runKeys = {
   list: (projectId: string) => ['runs', projectId] as const,
@@ -59,5 +60,27 @@ export function useUpdateRun(projectId: string) {
   return useMutation({
     mutationFn: ({ id, input }: { id: string; input: UpdateRunInput }) => api<TestRun>(`/runs/${id}`, { method: 'PATCH', body: input }),
     onSuccess: invalidate,
+  });
+}
+
+export type ResultPatch = { status?: ResultStatus; actualResult?: string; notes?: string };
+
+/** Saves one result and writes it into the cached run, so an open run page never refetches over typing. */
+export function useUpdateResult(runId: string, projectId: string) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({ resultId, patch }: { resultId: string; patch: ResultPatch }) =>
+      api<RunResult>(`/runs/${runId}/results/${resultId}`, { method: 'PATCH', body: patch }),
+    onSuccess: (saved) => {
+      queryClient.setQueryData<RunDetail>(runKeys.detail(runId), (old) => {
+        if (!old) return old;
+        const results = old.results.map((r) => (r.id === saved.id ? { ...r, ...saved, testCase: r.testCase } : r));
+        return { ...old, results, summary: summarizeResults(results) };
+      });
+      void queryClient.invalidateQueries({ queryKey: runKeys.list(projectId) });
+      void queryClient.invalidateQueries({ queryKey: ['reports', projectId] });
+      void queryClient.invalidateQueries({ queryKey: projectKeys.all });
+      void queryClient.invalidateQueries({ queryKey: projectKeys.dashboard });
+    },
   });
 }
