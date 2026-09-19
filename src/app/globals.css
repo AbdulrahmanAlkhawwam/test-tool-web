@@ -4,6 +4,8 @@
 
 @layer base {
   :root {
+    --font-sans: 'IBM Plex Sans';
+    --font-mono: 'IBM Plex Mono';
     --background: 0 0% 100%;
     --foreground: 215 28% 17%;
     --card: 0 0% 100%;
