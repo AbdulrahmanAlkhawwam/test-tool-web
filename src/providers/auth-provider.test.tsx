@@ -1,15 +1,16 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { act, render, screen } from '@testing-library/react';
+import { act, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import AppLayout from '@/app/(app)/layout';
 import { api } from '@/lib/api';
 import { safeNext } from '@/lib/safe-next';
 import { AuthProvider, useAuth } from './auth-provider';
 
-const replace = vi.fn();
+const nav = vi.hoisted(() => ({ replace: vi.fn(), pathname: '/projects/NINJA/runs/run1' }));
+const replace = nav.replace;
 vi.mock('next/navigation', () => ({
-  useRouter: () => ({ replace, push: vi.fn() }),
-  usePathname: () => '/projects/NINJA/runs/run1',
+  useRouter: () => ({ replace: nav.replace, push: vi.fn() }),
+  usePathname: () => nav.pathname,
 }));
 
 const json = (status: number, body: unknown) =>
@@ -95,7 +96,28 @@ describe('AppLayout', () => {
   afterEach(() => {
     fetchMock.mockReset();
     replace.mockReset();
+    nav.pathname = '/projects/NINJA/runs/run1';
     vi.unstubAllGlobals();
+  });
+
+  it('keeps the query string when redirecting an unauthenticated visit to login', async () => {
+    // The GitLab OAuth callback is the case that matters most: its `?code=&state=` must survive the
+    // round trip through login, or the exchange the callback page needs to complete is lost.
+    const here = '/gitlab/callback?code=a&state=b';
+    window.history.pushState({}, '', here);
+    nav.pathname = '/gitlab/callback';
+    fetchMock.mockResolvedValueOnce(json(401, { statusCode: 401, error: 'Unauthorized', message: 'Missing refresh token' }));
+    renderWithProviders(
+      <AppLayout>
+        <p>child</p>
+      </AppLayout>,
+    );
+
+    await waitFor(() => expect(replace).toHaveBeenCalled());
+    const href = replace.mock.calls[0][0] as string;
+    expect(href).toBe(`/login?next=${encodeURIComponent(here)}`);
+    // The login page reads it back through searchParams + safeNext and lands on the same place.
+    expect(safeNext(new URL(href, window.location.origin).searchParams.get('next'))).toBe(here);
   });
 
   it('keeps the page mounted and asks to sign in again when the session expires', async () => {

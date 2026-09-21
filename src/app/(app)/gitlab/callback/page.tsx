@@ -39,7 +39,7 @@ function GitlabCallback() {
       { state, code: code ?? undefined, error: error ?? undefined },
       {
         onSuccess: () => router.replace('/profile?gitlab=connected'),
-        onError: (e) => router.replace(`/profile?gitlab=error&reason=${failureReason(e)}`),
+        onError: (e) => router.replace(`/profile?gitlab=error&reason=${encodeURIComponent(failureReason(e))}`),
       },
     );
     // complete.mutate is re-created every render; the ref guard above keeps this a one-shot regardless.

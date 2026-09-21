@@ -11,7 +11,11 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
   const { status } = useAuth();
   const router = useRouter();
   const pathname = usePathname();
-  const loginHref = `/login?next=${encodeURIComponent(pathname)}`;
+  // The initial render is always `status === 'loading'` (before any client-only state update), and
+  // this href is only ever used once `status` has moved to `unauthenticated`, so reading window here
+  // can't cause a hydration mismatch — same reasoning as `reloginHref` below.
+  const search = typeof window !== 'undefined' ? window.location.search : '';
+  const loginHref = `/login?next=${encodeURIComponent(`${pathname}${search}`)}`;
 
   useEffect(() => {
     if (status === 'unauthenticated') router.replace(loginHref);
