@@ -69,6 +69,13 @@ export interface ProjectDetail {
   archivedAt: string | null;
   createdAt: string;
   modules: ModuleSummary[];
+  /** GitLab repository link (GitLab spec §5). Absent or null until an admin links a repository. */
+  gitlabProjectId?: number | null;
+  gitlabPath?: string | null;
+  gitlabWebUrl?: string | null;
+  defaultBranch?: string | null;
+  testsPath?: string | null;
+  playwrightConfigPath?: string | null;
 }
 
 export interface LatestResult {
@@ -136,6 +143,15 @@ export interface TestRun {
   status: RunStatus;
   startedAt: string;
   completedAt: string | null;
+  // Automated (GitLab CI) runs, GitLab spec §7–§8. Optional so manual-run fixtures and older responses stay valid.
+  branch?: string | null;
+  pipelineId?: number | null;
+  pipelineWebUrl?: string | null;
+  /** GitLab's pipeline status: pending, running, success, failed, canceled, … (null until the pipeline exists). */
+  pipelineStatus?: string | null;
+  triggeredById?: string | null;
+  /** Set by the importer, e.g. "Pipeline finished without a test report" or GitLab's error message. */
+  note?: string | null;
 }
 
 export interface RunListItem extends TestRun {
@@ -159,11 +175,18 @@ export interface RunResult {
   executedAt: string | null;
   executedBy: UserRef | null;
   testCase: RunCase | null;
+  // Automated results (GitLab spec §7–§8). Unmatched selected cases keep NOT_EXECUTED with notes "No automated test found".
+  file?: string | null;
+  /** The job's artifacts browser: <gitlabWebUrl>/-/jobs/<jobId>/artifacts/browse */
+  artifactsUrl?: string | null;
+  durationMs?: number | null;
+  errorMessage?: string | null;
 }
 
 export interface RunDetail extends TestRun {
   project: { id: string; key: string; name: string };
   createdBy: UserRef;
+  triggeredBy?: UserRef | null;
   summary: RunSummary;
   results: RunResult[];
 }
@@ -232,4 +255,167 @@ export interface Dashboard {
     project: { id: string; key: string; name: string };
     summary: RunSummary;
   }[];
+}
+
+// ---- GitLab automation (GitLab spec §4–§9) ----
+
+export type GitlabConnectionState = 'ACTIVE' | 'NEEDS_RECONNECT';
+
+export interface GitlabConnectionInfo {
+  username: string;
+  state: GitlabConnectionState;
+  /** Shown on the Profile card when the API includes it (spec §10: "username + avatar"). */
+  avatarUrl?: string | null;
+}
+
+/** GET /gitlab/status */
+export interface GitlabStatus {
+  enabled: boolean;
+  connection: GitlabConnectionInfo | null;
+}
+
+/** One result of GET /gitlab/projects?search= (admin, for linking): GitLab's project, camelCased by the API. */
+export interface GitlabProjectOption {
+  /** Becomes Project.gitlabProjectId. */
+  id: number;
+  name: string;
+  /** Becomes Project.gitlabPath, e.g. "mobile/ninja-store". */
+  pathWithNamespace: string;
+  /** Becomes Project.gitlabWebUrl. */
+  webUrl: string;
+  defaultBranch: string | null;
+}
+
+/** A project's repository link, read from ProjectDetail (see repositoryOf). */
+export interface RepositoryLink {
+  gitlabProjectId: number;
+  gitlabPath: string;
+  gitlabWebUrl: string;
+  defaultBranch: string;
+  testsPath: string;
+  playwrightConfigPath: string;
+}
+
+/** PUT /projects/:id/repository → the saved link (RepositoryLink plus the project id). The web always sends all four fields. */
+export type RepositoryInput = Pick<RepositoryLink, 'gitlabProjectId' | 'defaultBranch' | 'testsPath' | 'playwrightConfigPath'>;
+
+export type MergeRequestState = 'opened' | 'closed' | 'merged' | 'locked';
+
+export interface MergeRequestRef {
+  iid: number;
+  webUrl: string;
+  state: MergeRequestState;
+}
+
+export interface AutomationBranch {
+  name: string;
+  isDefault: boolean;
+  mergeRequest: MergeRequestRef | null;
+}
+
+/** GET /projects/:id/automation/branches: the default branch plus the current user's work branches. */
+export interface AutomationBranches {
+  defaultBranch: string;
+  branches: AutomationBranch[];
+}
+
+export interface AutomationTreeEntry {
+  /** Repository-relative, e.g. "e2e/auth/login.spec.ts". */
+  path: string;
+  name: string;
+  type: 'tree' | 'blob';
+}
+
+/** GET /projects/:id/automation/tree?ref= (recursive, limited to testsPath). */
+export interface AutomationTree {
+  ref: string;
+  testsPath: string;
+  entries: AutomationTreeEntry[];
+}
+
+/** GET /projects/:id/automation/file?ref=&path= */
+export interface AutomationFile {
+  path: string;
+  ref: string;
+  content: string;
+  lastCommitId: string;
+  size: number;
+  /** True for files over 1 MB (spec §6). */
+  readOnly: boolean;
+}
+
+/** PUT /projects/:id/automation/file */
+export interface SaveFileInput {
+  path: string;
+  content: string;
+  /** Omitted for a new file. */
+  lastCommitId?: string;
+  branchSlug: string;
+}
+
+export interface SaveFileResult {
+  branch: string;
+  commitId: string;
+  mergeRequest: MergeRequestRef;
+}
+
+export interface CoverageCase {
+  id: string;
+  code: string;
+  name: string;
+}
+
+export interface CoverageFile {
+  /** Repository-relative path, same as AutomationTreeEntry.path. */
+  path: string;
+  cases: CoverageCase[];
+  /** @TC-… tags in this file that match no case in the project (their results come back Unlinked). */
+  unknownCodes: string[];
+}
+
+export interface NotAutomatedCase extends CoverageCase {
+  module: { code: string; name: string };
+}
+
+/** GET /projects/:id/automation/coverage?ref= (scanned per commit, spec §6) */
+export interface CoverageReport {
+  ref: string;
+  commitId: string;
+  files: CoverageFile[];
+  notAutomated: NotAutomatedCase[];
+}
+
+export type AutomatedScopeMode = 'ALL' | 'PATH' | 'CASES';
+
+export interface AutomatedRunScope {
+  mode: AutomatedScopeMode;
+  path?: string;
+  caseIds?: string[];
+}
+
+/** POST /projects/:id/runs/automated → RunDetail (the API names the run "Automated · <branch> · <time>" when `name` is omitted) */
+export interface AutomatedRunInput {
+  branch: string;
+  name?: string;
+  scope: AutomatedRunScope;
+}
+
+/** POST /runs/:runId/results/:resultId/create-case. The API names the case from the test title when `name` is omitted. */
+export interface CreateCaseFromResultInput {
+  moduleId: string;
+  name?: string;
+  priority?: Priority;
+}
+
+/** The new case, the result now linked to it, and the tag to put in the test title (e.g. "@TC-CHK-001"). */
+export interface CreateCaseFromResultResponse {
+  testCase: TestCase;
+  resultId: string;
+  tag: string;
+}
+
+/** GET /projects/:id/automation/ci-snippet */
+export interface CiSnippetResponse {
+  playwrightConfigPath: string;
+  yaml: string;
 }
