@@ -16,6 +16,7 @@ import { buildFileTree } from './file-tree';
 import { FileTreeView } from './file-tree-view';
 import { MergeRequestLink } from './merge-request-link';
 import { NewFileDialog } from './new-file-dialog';
+import { RunTestsDialog } from './run-tests-dialog';
 
 interface AutomationViewProps {
   project: ProjectDetail;
@@ -100,6 +101,12 @@ export function AutomationView({ project, repo, username }: AutomationViewProps)
         <BranchSelect branches={branches.data.branches} value={branch} onChange={(next) => request({ kind: 'branch', branch: next })} />
         {mergeRequest && <MergeRequestLink mergeRequest={mergeRequest} />}
         <div className="ml-auto flex flex-wrap items-center gap-2">
+          <RunTestsDialog
+            project={project}
+            repo={repo}
+            initialBranch={branch}
+            initialPath={openFile && !openFile.isNew ? openFile.path : undefined}
+          />
           <NewFileDialog
             testsPath={repo.testsPath}
             existing={existingPaths}

@@ -26,7 +26,7 @@ const MODES: { value: SelectionMode; label: string }[] = [
 const toggle = <T,>(list: T[], value: T) => (list.includes(value) ? list.filter((v) => v !== value) : [...list, value]);
 
 /** Mounted only in "Pick test cases" mode, so the case list is fetched only when needed. */
-function CasePicker({ projectId, selected, onToggle }: { projectId: string; selected: string[]; onToggle: (id: string) => void }) {
+export function CasePicker({ projectId, selected, onToggle }: { projectId: string; selected: string[]; onToggle: (id: string) => void }) {
   const [search, setSearch] = useState('');
   const cases = useCases(projectId, { q: search || undefined, page: 1, pageSize: 200 });
   return (
