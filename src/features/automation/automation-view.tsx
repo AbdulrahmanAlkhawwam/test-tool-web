@@ -1,16 +1,19 @@
 'use client';
 
 import { ExternalLink } from 'lucide-react';
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
+import { ConfirmDialog } from '@/components/confirm-dialog';
 import { EmptyState, ErrorState, LoadingState } from '@/components/page-state';
 import { Button } from '@/components/ui/button';
 import { useAutomationBranches, useAutomationTree } from '@/features/gitlab/api';
 import { initialBranch, normalizeFolder } from '@/features/gitlab/paths';
-import type { ProjectDetail, RepositoryLink } from '@/lib/types';
+import type { ProjectDetail, RepositoryLink, SaveFileResult } from '@/lib/types';
 import { BranchSelect } from './branch-select';
+import { EditorPanel } from './editor-panel';
 import { buildFileTree } from './file-tree';
 import { FileTreeView } from './file-tree-view';
 import { MergeRequestLink } from './merge-request-link';
+import { NewFileDialog } from './new-file-dialog';
 
 interface AutomationViewProps {
   project: ProjectDetail;
@@ -19,30 +22,77 @@ interface AutomationViewProps {
   username: string;
 }
 
+interface OpenFile {
+  path: string;
+  isNew: boolean;
+}
+
+type Change = { kind: 'branch'; branch: string } | { kind: 'file'; file: OpenFile };
+
 export function AutomationView({ project, repo, username }: AutomationViewProps) {
   const branches = useAutomationBranches(project.id);
   const [chosenBranch, setChosenBranch] = useState<string | null>(null);
-  const [selectedPath, setSelectedPath] = useState<string | null>(null);
+  const [openFile, setOpenFile] = useState<OpenFile | null>(null);
+  const [dirty, setDirty] = useState(false);
+  const [pendingChange, setPendingChange] = useState<Change | null>(null);
+  const [lastSave, setLastSave] = useState<SaveFileResult | null>(null);
   const branch = chosenBranch ?? (branches.data ? initialBranch(branches.data.branches, username, repo.defaultBranch) : '');
   const tree = useAutomationTree(project.id, branch);
   const nodes = useMemo(() => buildFileTree(tree.data?.entries ?? [], repo.testsPath), [tree.data, repo.testsPath]);
+  const existingPaths = useMemo(
+    () => new Set((tree.data?.entries ?? []).filter((e) => e.type === 'blob').map((e) => normalizeFolder(e.path))),
+    [tree.data],
+  );
+  const current = branches.data?.branches.find((b) => b.name === branch);
+  // Right after the first save the branch list may not have refetched yet, so fall back to the save's MR.
+  const mergeRequest = current?.mergeRequest ?? (lastSave?.branch === branch ? lastSave.mergeRequest : null);
+
+  // Warn before leaving the page with unsaved editor changes.
+  useEffect(() => {
+    if (!dirty) return;
+    function warn(e: BeforeUnloadEvent) {
+      e.preventDefault();
+      e.returnValue = '';
+    }
+    window.addEventListener('beforeunload', warn);
+    return () => window.removeEventListener('beforeunload', warn);
+  }, [dirty]);
 
   if (branches.isPending) return <LoadingState label="Loading branches…" />;
   if (branches.isError) return <ErrorState error={branches.error} onRetry={() => branches.refetch()} />;
 
-  const current = branches.data.branches.find((b) => b.name === branch);
+  function apply(change: Change) {
+    if (change.kind === 'branch') {
+      setChosenBranch(change.branch);
+      setOpenFile(null);
+    } else {
+      setOpenFile(change.file);
+    }
+    setDirty(false);
+  }
 
-  function changeBranch(next: string) {
-    setChosenBranch(next);
-    setSelectedPath(null);
+  function request(change: Change) {
+    if (dirty) setPendingChange(change);
+    else apply(change);
+  }
+
+  function handleSaved(result: SaveFileResult) {
+    setLastSave(result);
+    setChosenBranch(result.branch);
+    setOpenFile((f) => (f ? { path: f.path, isNew: false } : f));
   }
 
   return (
     <div className="space-y-4">
       <div className="flex flex-wrap items-center gap-3 rounded-xl border bg-card px-4 py-3">
-        <BranchSelect branches={branches.data.branches} value={branch} onChange={changeBranch} />
-        {current?.mergeRequest && <MergeRequestLink mergeRequest={current.mergeRequest} />}
+        <BranchSelect branches={branches.data.branches} value={branch} onChange={(next) => request({ kind: 'branch', branch: next })} />
+        {mergeRequest && <MergeRequestLink mergeRequest={mergeRequest} />}
         <div className="ml-auto flex flex-wrap items-center gap-2">
+          <NewFileDialog
+            testsPath={repo.testsPath}
+            existing={existingPaths}
+            onCreate={(path) => request({ kind: 'file', file: { path, isNew: true } })}
+          />
           <Button variant="ghost" asChild>
             <a href={repo.gitlabWebUrl} target="_blank" rel="noopener noreferrer">
               Open in GitLab
@@ -67,19 +117,44 @@ export function AutomationView({ project, repo, username }: AutomationViewProps)
               key={`${repo.testsPath}:${branch}`}
               nodes={nodes}
               testsPath={repo.testsPath}
-              selectedPath={selectedPath}
-              onSelect={setSelectedPath}
+              selectedPath={openFile?.path ?? null}
+              onSelect={(path) => {
+                if (path !== openFile?.path) request({ kind: 'file', file: { path, isNew: false } });
+              }}
             />
           )}
         </section>
-        <section aria-label="Editor" className="min-w-0 rounded-xl border bg-card p-4">
-          {selectedPath ? (
-            <p className="font-mono text-sm">{selectedPath}</p>
+        <section id="automation-editor" aria-label="Editor" className="min-w-0 rounded-xl border bg-card p-4">
+          {openFile ? (
+            <EditorPanel
+              key={`${branch}:${openFile.path}:${openFile.isNew ? 'new' : 'existing'}`}
+              projectId={project.id}
+              branch={branch}
+              path={openFile.path}
+              isNew={openFile.isNew}
+              username={username}
+              onSaved={handleSaved}
+              onDirtyChange={setDirty}
+            />
           ) : (
-            <EmptyState title="Select a file" description="Choose a test file on the left to open it." />
+            <EmptyState title="Select a file" description="Choose a test file on the left to open it, or create a new one." />
           )}
         </section>
       </div>
+      <ConfirmDialog
+        open={!!pendingChange}
+        onOpenChange={(o) => {
+          if (!o) setPendingChange(null);
+        }}
+        title="Discard unsaved changes?"
+        description={`Your changes to ${openFile?.path ?? 'this file'} haven't been saved.`}
+        confirmLabel="Discard changes"
+        destructive
+        onConfirm={() => {
+          if (pendingChange) apply(pendingChange);
+          setPendingChange(null);
+        }}
+      />
     </div>
   );
 }

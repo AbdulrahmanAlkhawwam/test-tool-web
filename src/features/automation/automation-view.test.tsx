@@ -1,14 +1,15 @@
-import { screen } from '@testing-library/react';
+import { fireEvent, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { AutomationTreeEntry } from '@/lib/types';
 import { mockRoutes, type MockCall } from '@/test/fetch-routes';
-import { branchList, linkedProject, mainBranch, mergeRequest, repo, treeAt, workBranch } from '@/test/fixtures';
+import { branchList, fileAt, linkedProject, mainBranch, mergeRequest, repo, treeAt, workBranch } from '@/test/fixtures';
 import { renderWithClient } from '@/test/render';
 import { AutomationView } from './automation-view';
 
 vi.mock('sonner', () => ({ toast: { success: vi.fn(), error: vi.fn() } }));
 vi.mock('next/navigation', () => ({ useRouter: () => ({ push: vi.fn(), replace: vi.fn() }) }));
+vi.mock('./code-editor', () => import('@/test/code-editor-mock'));
 
 const trees: Record<string, AutomationTreeEntry[]> = {
   main: [{ path: 'e2e/home.spec.ts', name: 'home.spec.ts', type: 'blob' }],
@@ -53,6 +54,35 @@ describe('AutomationView', () => {
     expect(await screen.findByRole('button', { name: /home\.spec\.ts/ })).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: /login\.spec\.ts/ })).not.toBeInTheDocument();
     expect(screen.queryByRole('link', { name: /Merge request/ })).not.toBeInTheDocument();
+  });
+
+  it('switches to the new work branch after the first save and shows its merge request', async () => {
+    let saved = false;
+    const { callsTo } = mockRoutes({
+      'GET /projects/p1/automation/branches': () => (saved ? branchList(mainBranch, workBranch) : branchList(mainBranch)),
+      'GET /projects/p1/automation/tree': treeRoute,
+      'GET /projects/p1/automation/file': ({ query }: MockCall) =>
+        query.ref === workBranch.name ? fileAt(workBranch.name, 'new', 'c2') : fileAt('main', 'old', 'c1'),
+      'PUT /projects/p1/automation/file': () => {
+        saved = true;
+        return { branch: workBranch.name, commitId: 'c2', mergeRequest };
+      },
+    });
+    const user = userEvent.setup();
+    renderWithClient(<AutomationView project={linkedProject} repo={repo} username="amina" />);
+
+    await user.click(await screen.findByRole('button', { name: /home\.spec\.ts/ }));
+    const editor = await screen.findByLabelText('Code editor');
+    expect(editor).toHaveValue('old');
+    fireEvent.change(editor, { target: { value: 'new' } });
+    await user.click(screen.getByRole('button', { name: 'Save' }));
+    await user.type(await screen.findByLabelText('Work name'), 'Login fixes');
+    await user.click(screen.getByRole('button', { name: 'Save to my branch' }));
+
+    expect(await screen.findByRole('link', { name: /Merge request !7/ })).toHaveAttribute('href', mergeRequest.webUrl);
+    expect(screen.getByLabelText('Branch')).toHaveValue(workBranch.name);
+    expect(await screen.findByLabelText('Code editor')).toHaveValue('new');
+    expect(callsTo('PUT', '/projects/p1/automation/file')[0].body).toMatchObject({ path: 'e2e/home.spec.ts', branchSlug: 'login-fixes' });
   });
 
   it('re-expands the top-level folders when returning to a previously visited (cached) branch', async () => {
