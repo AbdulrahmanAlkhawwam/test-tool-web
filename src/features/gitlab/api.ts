@@ -12,6 +12,8 @@ import type {
   CoverageReport,
   CreateCaseFromResultInput,
   CreateCaseFromResultResponse,
+  GitlabOauthCompleteInput,
+  GitlabOauthCompleteResult,
   GitlabProjectOption,
   GitlabStatus,
   RepositoryInput,
@@ -73,6 +75,16 @@ export function useGitlabStatus() {
 
 export function useStartGitlabConnect() {
   return useMutation({ mutationFn: () => api<{ authorizeUrl: string }>('/gitlab/oauth/start') });
+}
+
+/** POST /gitlab/oauth/complete, called once by /gitlab/callback with GitLab's redirect params (spec §4, §10). */
+export function useCompleteGitlabConnect() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (input: GitlabOauthCompleteInput) =>
+      api<GitlabOauthCompleteResult>('/gitlab/oauth/complete', { method: 'POST', body: input }),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: gitlabKeys.status }),
+  });
 }
 
 export function useDisconnectGitlab() {

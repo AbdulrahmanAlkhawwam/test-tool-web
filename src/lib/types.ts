@@ -274,6 +274,24 @@ export interface GitlabStatus {
   connection: GitlabConnectionInfo | null;
 }
 
+/**
+ * POST /gitlab/oauth/complete: the web calls this from /gitlab/callback (GitLab redirects there, not to
+ * the API) with the query params GitLab gave back. `code` is absent when GitLab reports `error` instead.
+ */
+export interface GitlabOauthCompleteInput {
+  code?: string;
+  state: string;
+  error?: string;
+}
+
+export interface GitlabOauthCompleteResult {
+  status: 'connected';
+  username: string;
+}
+
+/** `details.reason` on the 400 from /gitlab/oauth/complete. */
+export type GitlabOauthFailureReason = 'invalid_state' | 'denied' | 'exchange_failed' | 'already_linked';
+
 /** One result of GET /gitlab/projects?search= (admin, for linking): GitLab's project, camelCased by the API. */
 export interface GitlabProjectOption {
   /** Becomes Project.gitlabProjectId. */

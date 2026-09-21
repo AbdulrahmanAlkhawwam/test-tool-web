@@ -11,6 +11,20 @@ import { ApiError } from '@/lib/api';
 import { goTo } from '@/lib/navigate';
 import { gitlabKeys, useDisconnectGitlab, useGitlabStatus, useStartGitlabConnect } from './api';
 
+/** Friendly text for each /gitlab/callback failure reason (spec §4, §10). Anything unrecognized falls to the last case. */
+function connectErrorMessage(reason: string | null): string {
+  switch (reason) {
+    case 'invalid_state':
+      return 'The GitLab sign-in link expired or was already used. Try connecting again.';
+    case 'denied':
+      return 'GitLab access was not granted.';
+    case 'already_linked':
+      return 'That GitLab account is already linked to another Ejad user.';
+    default:
+      return "Couldn't finish connecting GitLab. Try again.";
+  }
+}
+
 /** Profile → GitLab (spec §4, §10). Must render inside <Suspense> because it reads the search params. */
 export function GitlabCard() {
   const status = useGitlabStatus();
@@ -18,20 +32,27 @@ export function GitlabCard() {
   const disconnect = useDisconnectGitlab();
   const queryClient = useQueryClient();
   const [confirmOpen, setConfirmOpen] = useState(false);
-  const outcome = useSearchParams().get('gitlab');
+  const searchParams = useSearchParams();
+  const outcome = searchParams.get('gitlab');
+  const reason = searchParams.get('reason');
   const router = useRouter();
   const pathname = usePathname();
   const handled = useRef(false);
 
-  // The OAuth callback redirects to /profile?gitlab=connected. Confirm it once, refresh the status and drop the query.
+  // /gitlab/callback redirects to /profile?gitlab=connected or ?gitlab=error&reason=…. Confirm it once,
+  // refresh the status and drop only those two params, keeping any others the URL already carried.
   useEffect(() => {
     if (!outcome || handled.current) return;
     handled.current = true;
     if (outcome === 'connected') toast.success('GitLab connected');
-    else toast.error('GitLab could not be connected. Please try again.');
+    else toast.error(connectErrorMessage(reason));
     void queryClient.invalidateQueries({ queryKey: gitlabKeys.status });
-    router.replace(pathname);
-  }, [outcome, queryClient, router, pathname]);
+    const rest = new URLSearchParams(searchParams);
+    rest.delete('gitlab');
+    rest.delete('reason');
+    const query = rest.toString();
+    router.replace(query ? `${pathname}?${query}` : pathname);
+  }, [outcome, reason, queryClient, router, pathname, searchParams]);
 
   async function connect() {
     try {

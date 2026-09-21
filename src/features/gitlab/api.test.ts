@@ -9,6 +9,7 @@ import {
   useAutomationBranches,
   useAutomationFile,
   useCiSnippet,
+  useCompleteGitlabConnect,
   useCreateCaseFromResult,
   useGitlabProjects,
   useGitlabStatus,
@@ -47,6 +48,36 @@ describe('GitLab API hooks', () => {
       url = (await result.current.mutateAsync()).authorizeUrl;
     });
     expect(url).toBe('https://git.ejad.net/oauth/authorize?client_id=x');
+  });
+
+  it('completes the OAuth flow and refreshes the GitLab status', async () => {
+    const { callsTo } = mockRoutes({
+      'POST /gitlab/oauth/complete': { status: 'connected', username: 'amina' },
+    });
+    const { queryClient, wrapper } = createWrapper();
+    const invalidate = vi.spyOn(queryClient, 'invalidateQueries');
+    const { result } = renderHook(() => useCompleteGitlabConnect(), { wrapper });
+    await act(async () => {
+      await expect(result.current.mutateAsync({ code: 'abc', state: 's1' })).resolves.toEqual({
+        status: 'connected',
+        username: 'amina',
+      });
+    });
+    expect(callsTo('POST', '/gitlab/oauth/complete')[0].body).toEqual({ code: 'abc', state: 's1' });
+    expect(invalidate).toHaveBeenCalledWith({ queryKey: gitlabKeys.status });
+  });
+
+  it('rejects a failed OAuth completion with the failure reason', async () => {
+    mockRoutes({
+      'POST /gitlab/oauth/complete': () =>
+        json(400, { statusCode: 400, error: 'Bad Request', message: 'Already linked', details: { reason: 'already_linked' } }),
+    });
+    const { result } = renderHook(() => useCompleteGitlabConnect(), { wrapper: createWrapper().wrapper });
+    await act(async () => {
+      await expect(result.current.mutateAsync({ state: 's1' })).rejects.toMatchObject({
+        body: { details: { reason: 'already_linked' } },
+      });
+    });
   });
 
   it('searches GitLab projects only once two characters are typed', async () => {

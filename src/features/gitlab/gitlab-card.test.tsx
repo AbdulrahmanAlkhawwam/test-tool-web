@@ -64,4 +64,32 @@ describe('GitlabCard', () => {
     expect(toast.success).toHaveBeenCalledWith('GitLab connected');
     expect(nav.replace).toHaveBeenCalledWith('/profile');
   });
+
+  it('clears only the gitlab/reason params, keeping any other query string the page had', async () => {
+    nav.search = 'gitlab=connected&tab=repo';
+    mockRoutes({ 'GET /gitlab/status': { enabled: true, connection: { username: 'amina', state: 'ACTIVE' } } });
+    renderWithClient(<GitlabCard />);
+    expect(await screen.findByText('@amina')).toBeInTheDocument();
+    expect(nav.replace).toHaveBeenCalledWith('/profile?tab=repo');
+  });
+
+  it.each([
+    ['invalid_state', 'The GitLab sign-in link expired or was already used. Try connecting again.'],
+    ['denied', 'GitLab access was not granted.'],
+    ['already_linked', 'That GitLab account is already linked to another Ejad user.'],
+    ['exchange_failed', "Couldn't finish connecting GitLab. Try again."],
+  ])('shows a friendly message for the %s callback failure', async (reason, message) => {
+    nav.search = `gitlab=error&reason=${reason}`;
+    mockRoutes({ 'GET /gitlab/status': { enabled: true, connection: null } });
+    renderWithClient(<GitlabCard />);
+    await waitFor(() => expect(toast.error).toHaveBeenCalledWith(message));
+    expect(nav.replace).toHaveBeenCalledWith('/profile');
+  });
+
+  it("falls back to the generic message for an unrecognized failure reason", async () => {
+    nav.search = 'gitlab=error&reason=something_new';
+    mockRoutes({ 'GET /gitlab/status': { enabled: true, connection: null } });
+    renderWithClient(<GitlabCard />);
+    await waitFor(() => expect(toast.error).toHaveBeenCalledWith("Couldn't finish connecting GitLab. Try again."));
+  });
 });
