@@ -1,5 +1,7 @@
 'use client';
 
+import { Suspense } from 'react';
+import { GitlabCard } from '@/features/gitlab/gitlab-card';
 import { ChangePasswordForm } from '@/features/users/change-password-form';
 import { useAuth } from '@/providers/auth-provider';
 
@@ -13,6 +15,10 @@ export default function ProfilePage() {
           {user?.name} · {user?.email} · {user?.role === 'ADMIN' ? 'Admin' : 'Tester'}
         </p>
       </div>
+      {/* GitlabCard reads ?gitlab=connected with useSearchParams, which needs a Suspense boundary for `next build`. */}
+      <Suspense fallback={null}>
+        <GitlabCard />
+      </Suspense>
       <section className="rounded-xl border bg-card p-5">
         <h2 className="mb-4 font-medium">Change password</h2>
         <ChangePasswordForm />

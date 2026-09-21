@@ -1,5 +1,6 @@
 'use client';
 
+import { RepositorySettings } from '@/features/gitlab/repository-settings';
 import { useProject } from '@/features/projects/api';
 import { ProjectSettingsForm } from '@/features/projects/project-settings-form';
 import { formatDateTime } from '@/lib/format';
@@ -22,5 +23,11 @@ export default function SettingsPage({ params }: { params: { key: string } }) {
       </div>
     );
   }
-  return <ProjectSettingsForm key={project.data.id + project.data.name} project={project.data} />;
+  return (
+    <div className="space-y-6">
+      <ProjectSettingsForm key={project.data.id + project.data.name} project={project.data} />
+      {/* Admins only (GitLab spec §5). Re-keyed so the form starts from the new link after linking or unlinking. */}
+      <RepositorySettings key={`${project.data.id}:${project.data.gitlabProjectId ?? 'none'}`} project={project.data} />
+    </div>
+  );
 }
