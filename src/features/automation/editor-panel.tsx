@@ -60,6 +60,10 @@ export function EditorPanel({ projectId, branch, path, isNew, username, onSaved,
   const readOnly = !!current && (current.base.readOnly || current.base.size > MAX_EDITABLE_BYTES);
   const dirty = !!edit && !readOnly && (isNew || edit.draft !== edit.base.content);
   const workSlug = slugFromWorkBranch(branch, username);
+  // Lock the editor while the save is in flight: handleSaved switches the branch/isNew right after it resolves,
+  // which remounts this panel from the query cache holding only the just-posted content. Blocking edits during
+  // the request removes the window where a keystroke could land after that snapshot and be lost.
+  const editorReadOnly = readOnly || save.isPending;
 
   const onDirtyChangeRef = useRef(onDirtyChange);
   onDirtyChangeRef.current = onDirtyChange;
@@ -79,11 +83,12 @@ export function EditorPanel({ projectId, branch, path, isNew, username, onSaved,
         branchSlug,
       });
       setAskWorkName(false);
-      // Text typed while the save was in flight stays in the draft. The saved text becomes the new base.
-      setEdit((prev) => ({
+      // The editor is locked for the duration of the request (see editorReadOnly above), so the draft can't
+      // have changed underneath it. The saved text becomes the new base.
+      setEdit({
         base: { path, ref: result.branch, content, lastCommitId: result.commitId, size: byteLength(content), readOnly: false },
-        draft: prev?.draft ?? content,
-      }));
+        draft: content,
+      });
       toast.success(`Saved to ${result.branch}`);
       onSaved(result);
     } catch (e) {
@@ -131,7 +136,11 @@ export function EditorPanel({ projectId, branch, path, isNew, username, onSaved,
           {path}
           {isNew && <span className="ml-2 rounded bg-accent px-1.5 py-0.5 font-sans text-xs text-accent-foreground">New file</span>}
         </p>
-        {dirty && <span className="text-xs text-muted-foreground">Unsaved changes</span>}
+        {save.isPending ? (
+          <span className="text-xs text-muted-foreground">Saving…</span>
+        ) : (
+          dirty && <span className="text-xs text-muted-foreground">Unsaved changes</span>
+        )}
         <Button onClick={requestSave} disabled={!dirty || !!conflict || save.isPending}>
           <Save className="mr-1.5 h-4 w-4" aria-hidden />
           {save.isPending ? 'Saving…' : 'Save'}
@@ -171,7 +180,7 @@ export function EditorPanel({ projectId, branch, path, isNew, username, onSaved,
       <CodeEditor
         value={current.draft}
         language={languageFor(path)}
-        readOnly={readOnly}
+        readOnly={editorReadOnly}
         onChange={(value) => setEdit({ base: current.base, draft: value })}
       />
       <WorkNameDialog

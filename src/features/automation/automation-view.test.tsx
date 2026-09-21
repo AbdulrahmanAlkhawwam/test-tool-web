@@ -115,4 +115,86 @@ describe('AutomationView', () => {
     await user.selectOptions(screen.getByLabelText('Branch'), workBranch.name);
     expect(await screen.findByRole('button', { name: /login\.spec\.ts/ })).toBeInTheDocument();
   });
+
+  it('confirms before discarding a dirty editor to open a different file, and Cancel keeps it', async () => {
+    mockRoutes({
+      'GET /projects/p1/automation/branches': branchList(mainBranch, workBranch),
+      'GET /projects/p1/automation/tree': treeRoute,
+      'GET /projects/p1/automation/file': ({ query }: MockCall) =>
+        query.path === 'e2e/home.spec.ts'
+          ? fileAt(workBranch.name, 'home content', 'c2', { path: 'e2e/home.spec.ts' })
+          : fileAt(workBranch.name, 'login content', 'c1', { path: 'e2e/auth/login.spec.ts' }),
+    });
+    const user = userEvent.setup();
+    renderWithClient(<AutomationView project={linkedProject} repo={repo} username="amina" />);
+
+    await user.click(await screen.findByRole('button', { name: /login\.spec\.ts/ }));
+    const editor = await screen.findByLabelText('Code editor');
+    expect(editor).toHaveValue('login content');
+    fireEvent.change(editor, { target: { value: 'dirty edit' } });
+
+    await user.click(screen.getByRole('button', { name: /home\.spec\.ts/ }));
+    expect(await screen.findByText('Discard unsaved changes?')).toBeInTheDocument();
+
+    await user.click(screen.getByRole('button', { name: 'Cancel' }));
+    expect(screen.queryByText('Discard unsaved changes?')).not.toBeInTheDocument();
+    expect(screen.getByLabelText('Code editor')).toHaveValue('dirty edit');
+    expect(screen.getByRole('button', { name: /login\.spec\.ts/ })).toHaveAttribute('aria-current', 'true');
+
+    await user.click(screen.getByRole('button', { name: /home\.spec\.ts/ }));
+    await user.click(screen.getByRole('button', { name: 'Discard changes' }));
+
+    expect(await screen.findByLabelText('Code editor')).toHaveValue('home content');
+    expect(screen.getByRole('button', { name: /home\.spec\.ts/ })).toHaveAttribute('aria-current', 'true');
+  });
+
+  it('confirms before discarding a dirty editor to switch branches', async () => {
+    mockRoutes({
+      'GET /projects/p1/automation/branches': branchList(mainBranch, workBranch),
+      'GET /projects/p1/automation/tree': treeRoute,
+      'GET /projects/p1/automation/file': fileAt(workBranch.name, 'login content', 'c1', { path: 'e2e/auth/login.spec.ts' }),
+    });
+    const user = userEvent.setup();
+    renderWithClient(<AutomationView project={linkedProject} repo={repo} username="amina" />);
+
+    await user.click(await screen.findByRole('button', { name: /login\.spec\.ts/ }));
+    const editor = await screen.findByLabelText('Code editor');
+    fireEvent.change(editor, { target: { value: 'dirty edit' } });
+
+    await user.selectOptions(screen.getByLabelText('Branch'), 'main');
+    expect(await screen.findByText('Discard unsaved changes?')).toBeInTheDocument();
+
+    await user.click(screen.getByRole('button', { name: 'Cancel' }));
+    expect(screen.getByLabelText('Branch')).toHaveValue(workBranch.name);
+    expect(screen.getByLabelText('Code editor')).toHaveValue('dirty edit');
+
+    await user.selectOptions(screen.getByLabelText('Branch'), 'main');
+    await user.click(screen.getByRole('button', { name: 'Discard changes' }));
+
+    expect(screen.getByLabelText('Branch')).toHaveValue('main');
+    expect(await screen.findByRole('button', { name: /home\.spec\.ts/ })).toBeInTheDocument();
+  });
+
+  it('warns before leaving the page only while the editor is dirty', async () => {
+    const user = userEvent.setup();
+    mockRoutes({
+      'GET /projects/p1/automation/branches': branchList(mainBranch, workBranch),
+      'GET /projects/p1/automation/tree': treeRoute,
+      'GET /projects/p1/automation/file': fileAt(workBranch.name, 'login content', 'c1', { path: 'e2e/auth/login.spec.ts' }),
+    });
+    renderWithClient(<AutomationView project={linkedProject} repo={repo} username="amina" />);
+
+    await user.click(await screen.findByRole('button', { name: /login\.spec\.ts/ }));
+    const editor = await screen.findByLabelText('Code editor');
+
+    const cleanEvent = new Event('beforeunload', { cancelable: true });
+    window.dispatchEvent(cleanEvent);
+    expect(cleanEvent.defaultPrevented).toBe(false);
+
+    fireEvent.change(editor, { target: { value: 'dirty edit' } });
+
+    const dirtyEvent = new Event('beforeunload', { cancelable: true });
+    window.dispatchEvent(dirtyEvent);
+    expect(dirtyEvent.defaultPrevented).toBe(true);
+  });
 });

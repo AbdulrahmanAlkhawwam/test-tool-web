@@ -89,4 +89,26 @@ describe('EditorPanel', () => {
     expect(screen.getByText(/larger than 1 MB/)).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Save' })).toBeDisabled();
   });
+
+  it('locks the editor while a save is in flight so a keystroke can never be lost on remount', async () => {
+    let resolveSave!: (value: unknown) => void;
+    const pendingSave = new Promise((resolve) => {
+      resolveSave = resolve;
+    });
+    mockRoutes({ [FILE_ROUTE]: fileAt('tests/amina-login-fixes', 'old', 'c1'), [SAVE_ROUTE]: () => pendingSave });
+    const { user } = renderPanel({ branch: 'tests/amina-login-fixes' });
+
+    const editor = await screen.findByLabelText('Code editor');
+    fireEvent.change(editor, { target: { value: 'new' } });
+    await user.click(screen.getByRole('button', { name: 'Save' }));
+
+    expect(await screen.findByRole('button', { name: 'Saving…' })).toBeDisabled();
+    expect(screen.getAllByText('Saving…')).toHaveLength(2);
+    expect(screen.getByLabelText('Code editor')).toHaveAttribute('readonly');
+
+    resolveSave(saved);
+
+    await waitFor(() => expect(screen.getByLabelText('Code editor')).not.toHaveAttribute('readonly'));
+    expect(screen.getByLabelText('Code editor')).toHaveValue('new');
+  });
 });
