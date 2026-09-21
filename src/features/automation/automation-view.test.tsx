@@ -54,4 +54,35 @@ describe('AutomationView', () => {
     expect(screen.queryByRole('button', { name: /login\.spec\.ts/ })).not.toBeInTheDocument();
     expect(screen.queryByRole('link', { name: /Merge request/ })).not.toBeInTheDocument();
   });
+
+  it('re-expands the top-level folders when returning to a previously visited (cached) branch', async () => {
+    const localTrees: Record<string, AutomationTreeEntry[]> = {
+      'tests/amina-login-fixes': [
+        { path: 'e2e/auth', name: 'auth', type: 'tree' },
+        { path: 'e2e/auth/login.spec.ts', name: 'login.spec.ts', type: 'blob' },
+      ],
+      main: [
+        { path: 'e2e/smoke', name: 'smoke', type: 'tree' },
+        { path: 'e2e/smoke/basic.spec.ts', name: 'basic.spec.ts', type: 'blob' },
+      ],
+    };
+    mockRoutes({
+      'GET /projects/p1/automation/branches': branchList(mainBranch, workBranch),
+      'GET /projects/p1/automation/tree': ({ query }: MockCall) => treeAt(query.ref, localTrees[query.ref] ?? []),
+    });
+    const user = userEvent.setup();
+    renderWithClient(<AutomationView project={linkedProject} repo={repo} username="amina" />);
+
+    // Opens on amina's work branch (branch A): its top-level "auth" folder is expanded by default.
+    expect(await screen.findByRole('button', { name: /login\.spec\.ts/ })).toBeInTheDocument();
+
+    // Switch to main (branch B), whose different top-level folder ("smoke") expands by default too.
+    await user.selectOptions(screen.getByLabelText('Branch'), 'main');
+    expect(await screen.findByRole('button', { name: /basic\.spec\.ts/ })).toBeInTheDocument();
+
+    // Switch back to the work branch (branch A), now served from cache: its top-level folder must
+    // still be expanded by default, not stuck with branch B's leftover expand state.
+    await user.selectOptions(screen.getByLabelText('Branch'), workBranch.name);
+    expect(await screen.findByRole('button', { name: /login\.spec\.ts/ })).toBeInTheDocument();
+  });
 });

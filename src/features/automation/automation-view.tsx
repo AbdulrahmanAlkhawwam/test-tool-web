@@ -63,7 +63,13 @@ export function AutomationView({ project, repo, username }: AutomationViewProps)
           ) : nodes.length === 0 ? (
             <p className="px-1 py-6 text-center text-sm text-muted-foreground">No files in this folder on this branch yet.</p>
           ) : (
-            <FileTreeView nodes={nodes} testsPath={repo.testsPath} selectedPath={selectedPath} onSelect={setSelectedPath} />
+            <FileTreeView
+              key={`${repo.testsPath}:${branch}`}
+              nodes={nodes}
+              testsPath={repo.testsPath}
+              selectedPath={selectedPath}
+              onSelect={setSelectedPath}
+            />
           )}
         </section>
         <section aria-label="Editor" className="min-w-0 rounded-xl border bg-card p-4">
