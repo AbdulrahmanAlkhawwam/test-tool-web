@@ -21,6 +21,12 @@ const trees: Record<string, AutomationTreeEntry[]> = {
 };
 const treeRoute = ({ query }: MockCall) => treeAt(query.ref, trees[query.ref] ?? []);
 
+// The coverage and CI panels (Task 5) load too. These tests don't look at them.
+const panelRoutes = {
+  'GET /projects/p1/automation/coverage': { ref: 'main', commitId: 'abc', files: [], notAutomated: [] },
+  'GET /projects/p1/automation/ci-snippet': { playwrightConfigPath: 'playwright.config.ts', yaml: 'ejad-playwright:\n' },
+};
+
 describe('AutomationView', () => {
   afterEach(() => {
     vi.clearAllMocks();
@@ -29,6 +35,7 @@ describe('AutomationView', () => {
 
   it("opens on the user's work branch with its merge request and files", async () => {
     const { callsTo } = mockRoutes({
+      ...panelRoutes,
       'GET /projects/p1/automation/branches': branchList(mainBranch, workBranch),
       'GET /projects/p1/automation/tree': treeRoute,
     });
@@ -42,6 +49,7 @@ describe('AutomationView', () => {
 
   it("shows another branch's files after switching branches", async () => {
     mockRoutes({
+      ...panelRoutes,
       'GET /projects/p1/automation/branches': branchList(mainBranch, workBranch),
       'GET /projects/p1/automation/tree': treeRoute,
     });
@@ -59,6 +67,7 @@ describe('AutomationView', () => {
   it('switches to the new work branch after the first save and shows its merge request', async () => {
     let saved = false;
     const { callsTo } = mockRoutes({
+      ...panelRoutes,
       'GET /projects/p1/automation/branches': () => (saved ? branchList(mainBranch, workBranch) : branchList(mainBranch)),
       'GET /projects/p1/automation/tree': treeRoute,
       'GET /projects/p1/automation/file': ({ query }: MockCall) =>
@@ -97,6 +106,7 @@ describe('AutomationView', () => {
       ],
     };
     mockRoutes({
+      ...panelRoutes,
       'GET /projects/p1/automation/branches': branchList(mainBranch, workBranch),
       'GET /projects/p1/automation/tree': ({ query }: MockCall) => treeAt(query.ref, localTrees[query.ref] ?? []),
     });
@@ -118,6 +128,7 @@ describe('AutomationView', () => {
 
   it('confirms before discarding a dirty editor to open a different file, and Cancel keeps it', async () => {
     mockRoutes({
+      ...panelRoutes,
       'GET /projects/p1/automation/branches': branchList(mainBranch, workBranch),
       'GET /projects/p1/automation/tree': treeRoute,
       'GET /projects/p1/automation/file': ({ query }: MockCall) =>
@@ -150,6 +161,7 @@ describe('AutomationView', () => {
 
   it('confirms before discarding a dirty editor to switch branches', async () => {
     mockRoutes({
+      ...panelRoutes,
       'GET /projects/p1/automation/branches': branchList(mainBranch, workBranch),
       'GET /projects/p1/automation/tree': treeRoute,
       'GET /projects/p1/automation/file': fileAt(workBranch.name, 'login content', 'c1', { path: 'e2e/auth/login.spec.ts' }),
@@ -178,6 +190,7 @@ describe('AutomationView', () => {
   it('warns before leaving the page only while the editor is dirty', async () => {
     const user = userEvent.setup();
     mockRoutes({
+      ...panelRoutes,
       'GET /projects/p1/automation/branches': branchList(mainBranch, workBranch),
       'GET /projects/p1/automation/tree': treeRoute,
       'GET /projects/p1/automation/file': fileAt(workBranch.name, 'login content', 'c1', { path: 'e2e/auth/login.spec.ts' }),

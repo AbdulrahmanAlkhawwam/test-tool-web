@@ -5,10 +5,12 @@ import { useEffect, useMemo, useState } from 'react';
 import { ConfirmDialog } from '@/components/confirm-dialog';
 import { EmptyState, ErrorState, LoadingState } from '@/components/page-state';
 import { Button } from '@/components/ui/button';
-import { useAutomationBranches, useAutomationTree } from '@/features/gitlab/api';
+import { useAutomationBranches, useAutomationTree, useCoverage } from '@/features/gitlab/api';
 import { initialBranch, normalizeFolder } from '@/features/gitlab/paths';
 import type { ProjectDetail, RepositoryLink, SaveFileResult } from '@/lib/types';
 import { BranchSelect } from './branch-select';
+import { CiSnippet } from './ci-snippet';
+import { CoverageSection } from './coverage-section';
 import { EditorPanel } from './editor-panel';
 import { buildFileTree } from './file-tree';
 import { FileTreeView } from './file-tree-view';
@@ -46,6 +48,11 @@ export function AutomationView({ project, repo, username }: AutomationViewProps)
   const current = branches.data?.branches.find((b) => b.name === branch);
   // Right after the first save the branch list may not have refetched yet, so fall back to the save's MR.
   const mergeRequest = current?.mergeRequest ?? (lastSave?.branch === branch ? lastSave.mergeRequest : null);
+  const coverage = useCoverage(project.id, branch);
+  const caseCounts = useMemo(
+    () => Object.fromEntries((coverage.data?.files ?? []).map((f) => [f.path, f.cases.length])),
+    [coverage.data],
+  );
 
   // Warn before leaving the page with unsaved editor changes.
   useEffect(() => {
@@ -80,6 +87,11 @@ export function AutomationView({ project, repo, username }: AutomationViewProps)
     setLastSave(result);
     setChosenBranch(result.branch);
     setOpenFile((f) => (f ? { path: f.path, isNew: false } : f));
+  }
+
+  function openFromCoverage(path: string) {
+    if (path !== openFile?.path || openFile.isNew) request({ kind: 'file', file: { path, isNew: false } });
+    document.getElementById('automation-editor')?.scrollIntoView?.({ behavior: 'smooth', block: 'start' });
   }
 
   return (
@@ -118,6 +130,7 @@ export function AutomationView({ project, repo, username }: AutomationViewProps)
               nodes={nodes}
               testsPath={repo.testsPath}
               selectedPath={openFile?.path ?? null}
+              caseCounts={caseCounts}
               onSelect={(path) => {
                 if (path !== openFile?.path) request({ kind: 'file', file: { path, isNew: false } });
               }}
@@ -141,6 +154,8 @@ export function AutomationView({ project, repo, username }: AutomationViewProps)
           )}
         </section>
       </div>
+      <CoverageSection projectId={project.id} projectKey={project.key} gitRef={branch} onOpenFile={openFromCoverage} />
+      <CiSnippet projectId={project.id} />
       <ConfirmDialog
         open={!!pendingChange}
         onOpenChange={(o) => {
