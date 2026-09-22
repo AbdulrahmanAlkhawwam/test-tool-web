@@ -6,6 +6,7 @@ import { Button } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import { useGitlabStatus } from '@/features/gitlab/api';
 import type { RunDetail, RunResult } from '@/lib/types';
 import { useUpdateResult } from './api';
 import { CreateCaseFromResultDialog } from './create-case-from-result-dialog';
@@ -14,9 +15,13 @@ import { RunHeader } from './run-header';
 
 export function RunExecution({ run }: { run: RunDetail }) {
   const update = useUpdateResult(run.id, run.projectId);
+  const gitlab = useGitlabStatus();
   // Automated results come from GitLab's test report. The importer owns them, so they are never edited here (spec §7).
   const automated = run.type === 'AUTOMATED';
   const readOnly = run.status === 'COMPLETED' || automated;
+  // "Create test case from this" only makes sense while GitLab automation is on for this server; hidden
+  // until that's confirmed (spec: disabled mode).
+  const canCreateCase = gitlab.data?.enabled === true;
   const [createFrom, setCreateFrom] = useState<RunResult | null>(null);
   const [search, setSearch] = useState('');
   // "Only not executed" snapshots the matching rows when switched on, so rows the tester
@@ -114,7 +119,7 @@ export function RunExecution({ run }: { run: RunDetail }) {
               })
             }
             onDirtyChange={handleDirtyChange}
-            onCreateCase={automated && !r.testCaseId ? () => setCreateFrom(r) : undefined}
+            onCreateCase={automated && !r.testCaseId && canCreateCase ? () => setCreateFrom(r) : undefined}
           />
         ))}
       </ul>

@@ -128,6 +128,15 @@ describe('Automated run screen', () => {
     );
   });
 
+  it('hides "Create test case from this" when GitLab automation is disabled on this server', async () => {
+    const unlinked = result({ id: 'r2', testCaseId: null, testCase: null, title: 'checkout pays with card', file: 'e2e/checkout/pay.spec.ts' });
+    mockRoutes({ 'GET /gitlab/status': { enabled: false, connection: null } });
+    renderWithClient(<RunExecution run={automatedRun({}, [unlinked])} />);
+
+    await waitFor(() => expect(screen.getByText('checkout pays with card')).toBeInTheDocument());
+    expect(screen.queryByRole('button', { name: 'Create test case from this' })).not.toBeInTheDocument();
+  });
+
   it('creates a test case from an unlinked result', async () => {
     const unlinked = result({
       id: 'r2',
@@ -137,6 +146,7 @@ describe('Automated run screen', () => {
       file: 'e2e/checkout/pay.spec.ts',
     });
     const { callsTo } = mockRoutes({
+      'GET /gitlab/status': { enabled: true, connection: { username: 'amina', state: 'ACTIVE' } },
       'GET /projects/p1/modules': [
         { id: 'm1', name: 'Authentication', code: 'AUTH', caseCount: 3 },
         { id: 'm2', name: 'Checkout', code: 'CHK', caseCount: 0 },
@@ -150,7 +160,7 @@ describe('Automated run screen', () => {
     const user = userEvent.setup();
     renderWithClient(<RunExecution run={automatedRun({}, [unlinked])} />);
 
-    await user.click(screen.getByRole('button', { name: 'Create test case from this' }));
+    await user.click(await screen.findByRole('button', { name: 'Create test case from this' }));
     const dialog = await screen.findByRole('dialog');
     expect(within(dialog).getByLabelText('Test case name')).toHaveValue('checkout pays with card');
     await waitFor(() => expect(within(dialog).getByLabelText('Module')).toHaveValue('m2'));

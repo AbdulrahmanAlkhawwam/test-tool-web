@@ -160,7 +160,8 @@ describe('RunExecution', () => {
     expect(await within(row1).findByText(/Run is completed – results are read-only/)).toBeInTheDocument();
     expect(queryClient.getQueryState(runKeys.detail(run.id))?.isInvalidated).toBe(true);
     expect(within(row1).getByRole('radio', { name: 'Failed' })).toBeChecked();
-    expect(fetchMock).toHaveBeenCalledOnce(); // no automatic retry of a rejected save
+    // No automatic retry of a rejected save (a second call to the same result endpoint).
+    expect(fetchMock.mock.calls.filter(([url]) => String(url).includes('/results/'))).toHaveLength(1);
   });
 
   it('keeps a row visible after marking it Passed while "Only not executed" is on', async () => {
