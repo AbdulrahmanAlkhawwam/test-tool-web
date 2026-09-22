@@ -9,6 +9,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { ApiError } from '@/lib/api';
+import { safeExternalHref } from '@/lib/safe-external-href';
 import type { GitlabProjectOption, ProjectDetail, RepositoryLink } from '@/lib/types';
 import { repositoryOf } from './access';
 import { useGitlabProjects, useGitlabStatus, useLinkRepository, useUnlinkRepository } from './api';
@@ -58,10 +59,19 @@ export function RepositorySettings({ project }: { project: ProjectDetail }) {
       {repo && (
         <p className="text-sm">
           Linked to{' '}
-          <a href={repo.gitlabWebUrl} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1 font-mono text-primary hover:underline">
-            {repo.gitlabPath}
-            <ExternalLink className="h-3 w-3" aria-hidden />
-          </a>
+          {safeExternalHref(repo.gitlabWebUrl) ? (
+            <a
+              href={safeExternalHref(repo.gitlabWebUrl)}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="inline-flex items-center gap-1 font-mono text-primary hover:underline"
+            >
+              {repo.gitlabPath}
+              <ExternalLink className="h-3 w-3" aria-hidden />
+            </a>
+          ) : (
+            <span className="font-mono">{repo.gitlabPath}</span>
+          )}
         </p>
       )}
       {connection?.state === 'ACTIVE' ? (

@@ -7,6 +7,7 @@ import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
 import { formatDateTime } from '@/lib/format';
 import { STATUS_LABELS } from '@/lib/labels';
+import { safeExternalHref } from '@/lib/safe-external-href';
 import type { ResultStatus, RunResult } from '@/lib/types';
 import { cn } from '@/lib/utils';
 import type { ResultPatch } from './api';
@@ -60,6 +61,7 @@ function Field({ label, value }: { label: string; value: string | null }) {
 export function ResultRow({ result, readOnly, onSave, expanded, onExpandedChange, hidden, onDirtyChange, onCreateCase }: ResultRowProps) {
   const id = useId();
   const tc = result.testCase;
+  const artifactsHref = result.status === 'FAILED' ? safeExternalHref(result.artifactsUrl) : undefined;
   const [status, setStatus] = useState(result.status);
   const [actual, setActual] = useState(result.actualResult ?? '');
   const [notes, setNotes] = useState(result.notes ?? '');
@@ -151,9 +153,9 @@ export function ResultRow({ result, readOnly, onSave, expanded, onExpandedChange
               {result.executedBy.name} · {formatDateTime(result.executedAt)}
             </span>
           )}
-          {result.status === 'FAILED' && result.artifactsUrl && (
+          {artifactsHref && (
             <a
-              href={result.artifactsUrl}
+              href={artifactsHref}
               target="_blank"
               rel="noopener noreferrer"
               className="inline-flex items-center gap-1 text-xs text-primary hover:underline"

@@ -9,6 +9,7 @@ import { ConfirmDialog } from '@/components/confirm-dialog';
 import { Button } from '@/components/ui/button';
 import { ApiError } from '@/lib/api';
 import { goTo } from '@/lib/navigate';
+import { safeExternalHref } from '@/lib/safe-external-href';
 import { gitlabKeys, useDisconnectGitlab, useGitlabStatus, useStartGitlabConnect } from './api';
 
 /** Friendly text for each /gitlab/callback failure reason (spec §4, §10). Anything unrecognized falls to the last case. */
@@ -76,6 +77,7 @@ export function GitlabCard() {
   if (!status.data?.enabled) return null;
   const connection = status.data.connection;
   const needsReconnect = connection?.state === 'NEEDS_RECONNECT';
+  const avatarHref = connection ? safeExternalHref(connection.avatarUrl) : undefined;
 
   return (
     <section aria-labelledby="gitlab-heading" className="rounded-xl border bg-card p-5">
@@ -93,10 +95,10 @@ export function GitlabCard() {
       ) : (
         <div className="space-y-3">
           <div className="flex items-center gap-3">
-            {connection.avatarUrl ? (
+            {avatarHref ? (
               // The avatar comes from the GitLab host, so next/image would need its domain configured.
               // eslint-disable-next-line @next/next/no-img-element
-              <img src={connection.avatarUrl} alt="" className="h-9 w-9 rounded-full border" />
+              <img src={avatarHref} alt="" className="h-9 w-9 rounded-full border" />
             ) : (
               <span aria-hidden className="grid h-9 w-9 place-items-center rounded-full bg-muted text-sm font-medium">
                 {connection.username.slice(0, 1).toUpperCase()}

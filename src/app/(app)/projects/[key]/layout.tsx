@@ -9,6 +9,7 @@ import { automationAccess } from '@/features/gitlab/access';
 import { useGitlabStatus } from '@/features/gitlab/api';
 import { useProject } from '@/features/projects/api';
 import { ApiError } from '@/lib/api';
+import { safeExternalHref } from '@/lib/safe-external-href';
 import { cn } from '@/lib/utils';
 
 const TABS = [
@@ -57,19 +58,25 @@ export default function ProjectLayout({ children, params }: { children: React.Re
             {project.data.key}
           </Badge>
           {project.data.archivedAt && <Badge variant="secondary">Archived</Badge>}
-          {repo && (
-            <a
-              href={repo.gitlabWebUrl}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="inline-flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground"
-            >
-              <GitBranch className="h-4 w-4" aria-hidden />
-              <span className="font-mono">{repo.gitlabPath}</span>
-              <ExternalLink className="h-3 w-3" aria-hidden />
-              <span className="sr-only">(opens GitLab)</span>
-            </a>
-          )}
+          {repo &&
+            (safeExternalHref(repo.gitlabWebUrl) ? (
+              <a
+                href={safeExternalHref(repo.gitlabWebUrl)}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="inline-flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground"
+              >
+                <GitBranch className="h-4 w-4" aria-hidden />
+                <span className="font-mono">{repo.gitlabPath}</span>
+                <ExternalLink className="h-3 w-3" aria-hidden />
+                <span className="sr-only">(opens GitLab)</span>
+              </a>
+            ) : (
+              <span className="inline-flex items-center gap-1 text-sm text-muted-foreground">
+                <GitBranch className="h-4 w-4" aria-hidden />
+                <span className="font-mono">{repo.gitlabPath}</span>
+              </span>
+            ))}
         </div>
         {project.data.description && <p className="mt-1 max-w-3xl text-sm text-muted-foreground">{project.data.description}</p>}
       </div>

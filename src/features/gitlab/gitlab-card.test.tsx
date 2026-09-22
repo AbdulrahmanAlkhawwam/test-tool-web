@@ -45,6 +45,29 @@ describe('GitlabCard', () => {
     await waitFor(() => expect(goTo).toHaveBeenCalledWith('https://git.ejad.net/oauth/authorize?state=s1'));
   });
 
+  it('never renders an avatar <img> for a non-http(s) URL from the API', async () => {
+    mockRoutes({
+      'GET /gitlab/status': { enabled: true, connection: { username: 'amina', state: 'ACTIVE', avatarUrl: 'javascript:alert(1)' } },
+    });
+    const { container } = renderWithClient(<GitlabCard />);
+    expect(await screen.findByText('@amina')).toBeInTheDocument();
+    expect(container.querySelector('img')).not.toBeInTheDocument();
+    // Falls back to the initial-letter placeholder instead.
+    expect(screen.getByText('A')).toBeInTheDocument();
+  });
+
+  it('renders the avatar <img> for a valid http(s) URL', async () => {
+    mockRoutes({
+      'GET /gitlab/status': {
+        enabled: true,
+        connection: { username: 'amina', state: 'ACTIVE', avatarUrl: 'https://git.ejad.net/uploads/avatar.png' },
+      },
+    });
+    const { container } = renderWithClient(<GitlabCard />);
+    expect(await screen.findByText('@amina')).toBeInTheDocument();
+    expect(container.querySelector('img')).toHaveAttribute('src', 'https://git.ejad.net/uploads/avatar.png');
+  });
+
   it('asks to reconnect when the connection needs it', async () => {
     mockRoutes({
       'GET /gitlab/status': { enabled: true, connection: { username: 'amina', state: 'NEEDS_RECONNECT', avatarUrl: null } },

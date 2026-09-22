@@ -7,6 +7,7 @@ import { EmptyState, ErrorState, LoadingState } from '@/components/page-state';
 import { Button } from '@/components/ui/button';
 import { useAutomationBranches, useAutomationTree, useCoverage } from '@/features/gitlab/api';
 import { initialBranch, normalizeFolder } from '@/features/gitlab/paths';
+import { safeExternalHref } from '@/lib/safe-external-href';
 import type { ProjectDetail, RepositoryLink, SaveFileResult } from '@/lib/types';
 import { BranchSelect } from './branch-select';
 import { CiSnippet } from './ci-snippet';
@@ -112,12 +113,14 @@ export function AutomationView({ project, repo, username }: AutomationViewProps)
             existing={existingPaths}
             onCreate={(path) => request({ kind: 'file', file: { path, isNew: true } })}
           />
-          <Button variant="ghost" asChild>
-            <a href={repo.gitlabWebUrl} target="_blank" rel="noopener noreferrer">
-              Open in GitLab
-              <ExternalLink className="ml-1.5 h-3.5 w-3.5" aria-hidden />
-            </a>
-          </Button>
+          {safeExternalHref(repo.gitlabWebUrl) && (
+            <Button variant="ghost" asChild>
+              <a href={safeExternalHref(repo.gitlabWebUrl)} target="_blank" rel="noopener noreferrer">
+                Open in GitLab
+                <ExternalLink className="ml-1.5 h-3.5 w-3.5" aria-hidden />
+              </a>
+            </Button>
+          )}
         </div>
       </div>
       <div className="grid gap-4 lg:grid-cols-[18rem_minmax(0,1fr)]">

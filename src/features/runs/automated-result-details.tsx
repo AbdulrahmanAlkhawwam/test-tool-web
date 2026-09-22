@@ -1,12 +1,14 @@
 import { ExternalLink } from 'lucide-react';
 import { reportUrlFromArtifacts } from '@/features/gitlab/paths';
+import { safeExternalHref } from '@/lib/safe-external-href';
 import type { RunResult } from '@/lib/types';
 import { formatDuration } from './pipeline';
 
 /** File, duration, error and GitLab artifact links of an automated result (spec §7: artifacts are linked, never copied). */
 export function AutomatedResultDetails({ result }: { result: RunResult }) {
   const duration = formatDuration(result.durationMs);
-  const artifactsUrl = result.status === 'FAILED' ? result.artifactsUrl : null;
+  // Validated once here: reportUrl below is derived from this same string, so it inherits the check.
+  const artifactsUrl = result.status === 'FAILED' ? safeExternalHref(result.artifactsUrl) : undefined;
   if (!result.file && !duration && !result.errorMessage && !artifactsUrl) return null;
   const reportUrl = artifactsUrl ? reportUrlFromArtifacts(artifactsUrl) : null;
 

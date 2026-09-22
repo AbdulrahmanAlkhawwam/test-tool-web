@@ -96,6 +96,18 @@ describe('ResultRow', () => {
     expect(screen.getByLabelText('Actual result')).toHaveAttribute('readonly');
   });
 
+  it('links to a valid Artifacts URL on a failed result', () => {
+    const failed: RunResult = { ...result, status: 'FAILED', artifactsUrl: 'https://git.ejad.net/mobile/ninja-store/-/jobs/9/artifacts/browse' };
+    render(<ResultRow result={failed} readOnly={false} onSave={vi.fn()} expanded onExpandedChange={() => undefined} />);
+    expect(screen.getByRole('link', { name: 'Artifacts' })).toHaveAttribute('href', failed.artifactsUrl);
+  });
+
+  it('never renders an Artifacts link for a non-http(s) URL from the API', () => {
+    const failed: RunResult = { ...result, status: 'FAILED', artifactsUrl: 'javascript:alert(1)' };
+    render(<ResultRow result={failed} readOnly={false} onSave={vi.fn()} expanded onExpandedChange={() => undefined} />);
+    expect(screen.queryByRole('link', { name: 'Artifacts' })).not.toBeInTheDocument();
+  });
+
   it('does not let a stale cache update (from a slow save) erase newer unsaved text', async () => {
     // The first save never resolves during this test, standing in for a slow request that is
     // still in flight when a stale cache write for the same field arrives.
