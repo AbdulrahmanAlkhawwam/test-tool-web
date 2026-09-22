@@ -11,6 +11,7 @@ import { ApiError, download } from '@/lib/api';
 import { formatDateTime } from '@/lib/format';
 import type { RunDetail } from '@/lib/types';
 import { useUpdateRun } from './api';
+import { AutomatedRunInfo } from './automated-run-info';
 
 /** `unsavedCount`: results with an unsaved, in-flight or failed change — completing would lock them out. */
 export function RunHeader({ run, unsavedCount = 0 }: { run: RunDetail; unsavedCount?: number }) {
@@ -59,13 +60,14 @@ export function RunHeader({ run, unsavedCount = 0 }: { run: RunDetail; unsavedCo
             {formatDateTime(run.startedAt)} by {run.createdBy.name}
             {run.completedAt && ` · completed ${formatDateTime(run.completedAt)}`}
           </p>
+          <AutomatedRunInfo run={run} className="mt-2" />
         </div>
         <div className="flex gap-2">
           <Button variant="outline" disabled={exporting} onClick={() => void exportResults()}>
             <Download className="mr-1.5 h-4 w-4" aria-hidden />
             Export results
           </Button>
-          {run.status === 'IN_PROGRESS' && (
+          {run.status === 'IN_PROGRESS' && run.type !== 'AUTOMATED' && (
             <Button onClick={() => setConfirmOpen(true)}>
               <CheckCircle2 className="mr-1.5 h-4 w-4" aria-hidden />
               Complete run

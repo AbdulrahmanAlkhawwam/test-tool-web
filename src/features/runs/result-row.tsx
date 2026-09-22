@@ -1,14 +1,16 @@
 'use client';
 
-import { ChevronDown } from 'lucide-react';
+import { ChevronDown, ExternalLink } from 'lucide-react';
 import { useEffect, useId, useRef, useState } from 'react';
 import { PriorityBadge } from '@/components/priority-badge';
+import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
 import { formatDateTime } from '@/lib/format';
 import { STATUS_LABELS } from '@/lib/labels';
 import type { ResultStatus, RunResult } from '@/lib/types';
 import { cn } from '@/lib/utils';
 import type { ResultPatch } from './api';
+import { AutomatedResultDetails } from './automated-result-details';
 import { SaveIndicator } from './save-indicator';
 import { useAutoSave } from './use-auto-save';
 
@@ -42,6 +44,8 @@ interface ResultRowProps {
   hidden?: boolean;
   /** Reports whether this row has an unsaved, in-flight, or failed change, so a page-level guard can warn before unload. */
   onDirtyChange?: (resultId: string, dirty: boolean) => void;
+  /** Set for Unlinked automated results: opens "Create test case from this". */
+  onCreateCase?: () => void;
 }
 
 function Field({ label, value }: { label: string; value: string | null }) {
@@ -53,7 +57,7 @@ function Field({ label, value }: { label: string; value: string | null }) {
   );
 }
 
-export function ResultRow({ result, readOnly, onSave, expanded, onExpandedChange, hidden, onDirtyChange }: ResultRowProps) {
+export function ResultRow({ result, readOnly, onSave, expanded, onExpandedChange, hidden, onDirtyChange, onCreateCase }: ResultRowProps) {
   const id = useId();
   const tc = result.testCase;
   const [status, setStatus] = useState(result.status);
@@ -108,6 +112,11 @@ export function ResultRow({ result, readOnly, onSave, expanded, onExpandedChange
           </span>
         </button>
         {tc && <PriorityBadge priority={tc.priority} />}
+        {!tc && onCreateCase && (
+          <Button type="button" size="sm" variant="outline" onClick={onCreateCase}>
+            Create test case from this
+          </Button>
+        )}
 
         <fieldset className="flex flex-wrap gap-1" disabled={readOnly}>
           <legend className="sr-only">Result status for {tc?.code ?? result.title}</legend>
@@ -142,6 +151,17 @@ export function ResultRow({ result, readOnly, onSave, expanded, onExpandedChange
               {result.executedBy.name} · {formatDateTime(result.executedAt)}
             </span>
           )}
+          {result.status === 'FAILED' && result.artifactsUrl && (
+            <a
+              href={result.artifactsUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="inline-flex items-center gap-1 text-xs text-primary hover:underline"
+            >
+              Artifacts
+              <ExternalLink className="h-3 w-3" aria-hidden />
+            </a>
+          )}
         </div>
       </div>
 
@@ -160,6 +180,7 @@ export function ResultRow({ result, readOnly, onSave, expanded, onExpandedChange
             )}
           </div>
           <div className="space-y-3">
+            <AutomatedResultDetails result={result} />
             <div className="space-y-1.5">
               <label htmlFor={`${id}-actual`} className="text-xs font-medium text-muted-foreground">
                 Actual result

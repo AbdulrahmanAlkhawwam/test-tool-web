@@ -2,6 +2,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { projectKeys } from '@/features/projects/api';
 import { api, ApiError } from '@/lib/api';
 import type { ResultStatus, RunDetail, RunListItem, RunResult, RunSelection, TestRun } from '@/lib/types';
+import { needsPipelinePolling, PIPELINE_POLL_MS } from './pipeline';
 import { summarizeResults } from './summary';
 
 export const runKeys = {
@@ -14,11 +15,17 @@ export function useRuns(projectId: string) {
     queryKey: runKeys.list(projectId),
     queryFn: () => api<RunListItem[]>(`/projects/${projectId}/runs`),
     enabled: !!projectId,
+    // Automated runs change on GitLab's side. Refresh while any pipeline is still running (spec §7).
+    refetchInterval: (query) => (query.state.data?.some(needsPipelinePolling) ? PIPELINE_POLL_MS : false),
   });
 }
 
 export function useRun(runId: string) {
-  return useQuery({ queryKey: runKeys.detail(runId), queryFn: () => api<RunDetail>(`/runs/${runId}`) });
+  return useQuery({
+    queryKey: runKeys.detail(runId),
+    queryFn: () => api<RunDetail>(`/runs/${runId}`),
+    refetchInterval: (query) => (needsPipelinePolling(query.state.data) ? PIPELINE_POLL_MS : false),
+  });
 }
 
 function useInvalidateRuns(projectId: string) {

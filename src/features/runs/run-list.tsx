@@ -4,6 +4,7 @@ import { Badge } from '@/components/ui/badge';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { formatDateTime } from '@/lib/format';
 import type { RunListItem } from '@/lib/types';
+import { AutomatedRunInfo } from './automated-run-info';
 
 export function RunList({ projectKey, runs }: { projectKey: string; runs: RunListItem[] }) {
   return (
@@ -28,6 +29,7 @@ export function RunList({ projectKey, runs }: { projectKey: string; runs: RunLis
                 <p className="text-xs text-muted-foreground">
                   {[run.type === 'AUTOMATED' ? 'Automated' : 'Manual', run.build, run.environment].filter(Boolean).join(' · ')}
                 </p>
+                <AutomatedRunInfo run={run} compact className="mt-1" />
               </TableCell>
               <TableCell>
                 {run.status === 'COMPLETED' ? <Badge variant="secondary">Completed</Badge> : <Badge className="bg-accent text-accent-foreground hover:bg-accent">In progress</Badge>}

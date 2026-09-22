@@ -6,14 +6,18 @@ import { Button } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import type { RunDetail } from '@/lib/types';
+import type { RunDetail, RunResult } from '@/lib/types';
 import { useUpdateResult } from './api';
+import { CreateCaseFromResultDialog } from './create-case-from-result-dialog';
 import { ResultRow } from './result-row';
 import { RunHeader } from './run-header';
 
 export function RunExecution({ run }: { run: RunDetail }) {
   const update = useUpdateResult(run.id, run.projectId);
-  const readOnly = run.status === 'COMPLETED';
+  // Automated results come from GitLab's test report. The importer owns them, so they are never edited here (spec §7).
+  const automated = run.type === 'AUTOMATED';
+  const readOnly = run.status === 'COMPLETED' || automated;
+  const [createFrom, setCreateFrom] = useState<RunResult | null>(null);
   const [search, setSearch] = useState('');
   // "Only not executed" snapshots the matching rows when switched on, so rows the tester
   // completes afterwards stay in place instead of disappearing (spec §8: nothing hides).
@@ -57,10 +61,16 @@ export function RunExecution({ run }: { run: RunDetail }) {
   return (
     <div className="space-y-4">
       <RunHeader run={run} unsavedCount={dirtyCount} />
-      {readOnly && (
+      {automated && run.status === 'IN_PROGRESS' ? (
         <p role="status" className="rounded-md bg-muted px-3 py-2 text-sm text-muted-foreground">
-          This run is completed. Results are read-only.
+          Results arrive from GitLab when the pipeline finishes. This page refreshes every 10 seconds.
         </p>
+      ) : (
+        readOnly && (
+          <p role="status" className="rounded-md bg-muted px-3 py-2 text-sm text-muted-foreground">
+            This run is completed. Results are read-only.
+          </p>
+        )
       )}
       <div className="flex flex-wrap items-center gap-4">
         <Input type="search" placeholder="Search in this run" aria-label="Search in this run" className="max-w-xs" value={search} onChange={(e) => setSearch(e.target.value)} />
@@ -104,9 +114,11 @@ export function RunExecution({ run }: { run: RunDetail }) {
               })
             }
             onDirtyChange={handleDirtyChange}
+            onCreateCase={automated && !r.testCaseId ? () => setCreateFrom(r) : undefined}
           />
         ))}
       </ul>
+      <CreateCaseFromResultDialog run={run} result={createFrom} onClose={() => setCreateFrom(null)} />
     </div>
   );
 }
