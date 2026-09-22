@@ -1,4 +1,4 @@
-import { screen, waitFor } from '@testing-library/react';
+import { screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { mockRoutes } from '@/test/fetch-routes';
@@ -40,6 +40,33 @@ describe('RunTestsDialog', () => {
       branch: 'tests/amina/login-fixes',
       scope: { mode: 'PATH', path: 'e2e/auth' },
     });
+  });
+
+  it('warns and asks to confirm before starting a pipeline while the editor has unsaved changes', async () => {
+    const { callsTo } = mockRoutes({ ...routes, 'POST /projects/p1/runs/automated': { id: 'run9' } });
+    const user = userEvent.setup();
+    renderWithClient(<RunTestsDialog project={linkedProject} repo={repo} dirty />);
+
+    await user.click(screen.getByRole('button', { name: 'Run tests' }));
+    expect(screen.getByRole('alert')).toHaveTextContent("Your unsaved changes aren't included");
+    await user.click(screen.getByRole('button', { name: 'Start pipeline' }));
+
+    expect(callsTo('POST', '/projects/p1/runs/automated')).toHaveLength(0);
+    const confirmDialog = await screen.findByRole('alertdialog');
+    expect(confirmDialog).toHaveTextContent('Start without your unsaved changes?');
+
+    await user.click(within(confirmDialog).getByRole('button', { name: 'Start pipeline' }));
+    await waitFor(() => expect(push).toHaveBeenCalledWith('/projects/NINJA/runs/run9'));
+    expect(callsTo('POST', '/projects/p1/runs/automated')).toHaveLength(1);
+  });
+
+  it('does not warn when the editor has no unsaved changes', async () => {
+    mockRoutes({ ...routes, 'POST /projects/p1/runs/automated': { id: 'run9' } });
+    const user = userEvent.setup();
+    renderWithClient(<RunTestsDialog project={linkedProject} repo={repo} />);
+
+    await user.click(screen.getByRole('button', { name: 'Run tests' }));
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument();
   });
 
   it('blocks a path outside the tests folder', async () => {

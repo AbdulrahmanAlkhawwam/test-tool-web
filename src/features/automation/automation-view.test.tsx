@@ -1,14 +1,16 @@
-import { fireEvent, screen } from '@testing-library/react';
+import { act, fireEvent, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, describe, expect, it, vi } from 'vitest';
+import { automationKeys } from '@/features/gitlab/api';
 import type { AutomationTreeEntry } from '@/lib/types';
-import { mockRoutes, type MockCall } from '@/test/fetch-routes';
+import { apiError, mockRoutes, type MockCall } from '@/test/fetch-routes';
 import { branchList, fileAt, linkedProject, mainBranch, mergeRequest, repo, treeAt, workBranch } from '@/test/fixtures';
 import { renderWithClient } from '@/test/render';
 import { AutomationView } from './automation-view';
 
 vi.mock('sonner', () => ({ toast: { success: vi.fn(), error: vi.fn() } }));
-vi.mock('next/navigation', () => ({ useRouter: () => ({ push: vi.fn(), replace: vi.fn() }) }));
+const push = vi.hoisted(() => vi.fn());
+vi.mock('next/navigation', () => ({ useRouter: () => ({ push, replace: vi.fn() }) }));
 vi.mock('./code-editor', () => import('@/test/code-editor-mock'));
 
 const trees: Record<string, AutomationTreeEntry[]> = {
@@ -237,5 +239,136 @@ describe('AutomationView', () => {
     const dirtyEvent = new Event('beforeunload', { cancelable: true });
     window.dispatchEvent(dirtyEvent);
     expect(dirtyEvent.defaultPrevented).toBe(true);
+  });
+
+  it('keeps the editor and its unsaved text mounted when a background branches refetch fails', async () => {
+    let fail = false;
+    mockRoutes({
+      ...panelRoutes,
+      'GET /projects/p1/automation/branches': () => (fail ? apiError(500, 'Boom') : branchList(mainBranch, workBranch)),
+      'GET /projects/p1/automation/tree': treeRoute,
+      'GET /projects/p1/automation/file': fileAt(workBranch.name, 'login content', 'c1', { path: 'e2e/auth/login.spec.ts' }),
+    });
+    const { queryClient } = renderWithClient(<AutomationView project={linkedProject} repo={repo} username="amina" />);
+
+    const user = userEvent.setup();
+    await user.click(await screen.findByRole('button', { name: /login\.spec\.ts/ }));
+    const editor = await screen.findByLabelText('Code editor');
+    fireEvent.change(editor, { target: { value: 'dirty edit' } });
+
+    fail = true;
+    await act(() => queryClient.refetchQueries({ queryKey: automationKeys.branches('p1') }));
+
+    expect(await screen.findByText(/Couldn.t refresh branches/)).toBeInTheDocument();
+    expect(screen.getByLabelText('Code editor')).toHaveValue('dirty edit');
+    expect(screen.getByLabelText('Branch')).toHaveValue(workBranch.name);
+  });
+
+  it('pins the branch once chosen and warns instead of switching silently when it disappears from the list', async () => {
+    let deleted = false;
+    mockRoutes({
+      ...panelRoutes,
+      'GET /projects/p1/automation/branches': () => (deleted ? branchList(mainBranch) : branchList(mainBranch, workBranch)),
+      'GET /projects/p1/automation/tree': treeRoute,
+      'GET /projects/p1/automation/file': fileAt(workBranch.name, 'login content', 'c1', { path: 'e2e/auth/login.spec.ts' }),
+    });
+    const user = userEvent.setup();
+    const { queryClient } = renderWithClient(<AutomationView project={linkedProject} repo={repo} username="amina" />);
+
+    await user.click(await screen.findByRole('button', { name: /login\.spec\.ts/ }));
+    expect(screen.getByLabelText('Branch')).toHaveValue(workBranch.name);
+    const editor = await screen.findByLabelText('Code editor');
+    fireEvent.change(editor, { target: { value: 'dirty edit' } });
+
+    // The branch's MR gets merged and GitLab deletes it: the next branches refetch no longer lists it.
+    deleted = true;
+    await act(() => queryClient.refetchQueries({ queryKey: automationKeys.branches('p1') }));
+
+    expect(await screen.findByText(/This branch no longer exists in GitLab/)).toBeInTheDocument();
+    // Never switches silently: the branch selector and the editor (with the unsaved text) stay put.
+    expect(screen.getByLabelText('Branch')).toHaveValue(workBranch.name);
+    expect(screen.getByLabelText('Code editor')).toHaveValue('dirty edit');
+  });
+
+  it('guards in-app navigation while the editor is dirty: Cancel stays, Confirm navigates', async () => {
+    mockRoutes({
+      ...panelRoutes,
+      'GET /projects/p1/automation/branches': branchList(mainBranch, workBranch),
+      'GET /projects/p1/automation/tree': treeRoute,
+      'GET /projects/p1/automation/file': fileAt(workBranch.name, 'login content', 'c1', { path: 'e2e/auth/login.spec.ts' }),
+    });
+    const user = userEvent.setup();
+    renderWithClient(
+      <>
+        <a href="/elsewhere" onClick={(e) => e.preventDefault()}>
+          Elsewhere
+        </a>
+        <AutomationView project={linkedProject} repo={repo} username="amina" />
+      </>,
+    );
+
+    await user.click(await screen.findByRole('button', { name: /login\.spec\.ts/ }));
+    fireEvent.change(await screen.findByLabelText('Code editor'), { target: { value: 'dirty edit' } });
+
+    await user.click(screen.getByRole('link', { name: 'Elsewhere' }));
+    expect(await screen.findByText('Discard unsaved changes?')).toBeInTheDocument();
+    expect(push).not.toHaveBeenCalled();
+
+    await user.click(screen.getByRole('button', { name: 'Cancel' }));
+    expect(screen.queryByText('Discard unsaved changes?')).not.toBeInTheDocument();
+    expect(push).not.toHaveBeenCalled();
+    expect(screen.getByLabelText('Code editor')).toHaveValue('dirty edit');
+
+    await user.click(screen.getByRole('link', { name: 'Elsewhere' }));
+    await user.click(screen.getByRole('button', { name: 'Discard changes' }));
+    expect(push).toHaveBeenCalledWith('/elsewhere');
+  });
+
+  it('does not intercept an internal link click when the editor has no unsaved changes', async () => {
+    mockRoutes({
+      ...panelRoutes,
+      'GET /projects/p1/automation/branches': branchList(mainBranch, workBranch),
+      'GET /projects/p1/automation/tree': treeRoute,
+    });
+    const user = userEvent.setup();
+    renderWithClient(
+      <>
+        <a href="/elsewhere" onClick={(e) => e.preventDefault()}>
+          Elsewhere
+        </a>
+        <AutomationView project={linkedProject} repo={repo} username="amina" />
+      </>,
+    );
+
+    await screen.findByRole('button', { name: /login\.spec\.ts/ });
+    await user.click(screen.getByRole('link', { name: 'Elsewhere' }));
+
+    expect(screen.queryByText('Discard unsaved changes?')).not.toBeInTheDocument();
+    expect(push).not.toHaveBeenCalled();
+  });
+
+  it("doesn't intercept an external link click even while the editor is dirty", async () => {
+    mockRoutes({
+      ...panelRoutes,
+      'GET /projects/p1/automation/branches': branchList(mainBranch, workBranch),
+      'GET /projects/p1/automation/tree': treeRoute,
+      'GET /projects/p1/automation/file': fileAt(workBranch.name, 'login content', 'c1', { path: 'e2e/auth/login.spec.ts' }),
+    });
+    const user = userEvent.setup();
+    renderWithClient(
+      <>
+        <a href="https://example.com/external" onClick={(e) => e.preventDefault()}>
+          External
+        </a>
+        <AutomationView project={linkedProject} repo={repo} username="amina" />
+      </>,
+    );
+
+    await user.click(await screen.findByRole('button', { name: /login\.spec\.ts/ }));
+    fireEvent.change(await screen.findByLabelText('Code editor'), { target: { value: 'dirty edit' } });
+
+    await user.click(screen.getByRole('link', { name: 'External' }));
+    expect(screen.queryByText('Discard unsaved changes?')).not.toBeInTheDocument();
+    expect(push).not.toHaveBeenCalled();
   });
 });

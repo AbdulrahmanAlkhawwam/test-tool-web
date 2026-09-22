@@ -12,9 +12,9 @@ describe('gitlab access', () => {
 
   it('shows GitLab UI only when enabled and linked, and asks to (re)connect first', () => {
     const active = { enabled: true, connection: { username: 'amina', state: 'ACTIVE' as const } };
-    expect(automationAccess(undefined, linkedProject)).toEqual({ state: 'hidden' });
-    expect(automationAccess({ enabled: false, connection: null }, linkedProject)).toEqual({ state: 'hidden' });
-    expect(automationAccess(active, unlinkedProject)).toEqual({ state: 'hidden' });
+    expect(automationAccess(undefined, linkedProject)).toEqual({ state: 'hidden', reason: 'disabled' });
+    expect(automationAccess({ enabled: false, connection: null }, linkedProject)).toEqual({ state: 'hidden', reason: 'disabled' });
+    expect(automationAccess(active, unlinkedProject)).toEqual({ state: 'hidden', reason: 'unlinked' });
     expect(automationAccess({ enabled: true, connection: null }, linkedProject)).toEqual({ state: 'connect', repo });
     expect(
       automationAccess({ enabled: true, connection: { username: 'amina', state: 'NEEDS_RECONNECT' } }, linkedProject),
