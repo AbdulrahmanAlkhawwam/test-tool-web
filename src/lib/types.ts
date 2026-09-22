@@ -358,7 +358,7 @@ export interface AutomationFile {
   content: string;
   lastCommitId: string;
   size: number;
-  /** True for files over 1 MB (spec §6). */
+  /** True when this file opens read-only here: over 1 MB, not a recognized text extension, or not UTF-8 (spec §6). */
   readOnly: boolean;
 }
 
@@ -374,7 +374,8 @@ export interface SaveFileInput {
 export interface SaveFileResult {
   branch: string;
   commitId: string;
-  mergeRequest: MergeRequestRef;
+  /** Null when the save succeeded but opening/updating the merge request failed; retried on the next save. */
+  mergeRequest: MergeRequestRef | null;
 }
 
 export interface CoverageCase {

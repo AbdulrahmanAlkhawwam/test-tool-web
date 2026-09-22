@@ -15,7 +15,7 @@ interface WorkNameDialogProps {
   onConfirm: (slug: string) => void;
 }
 
-/** Asked on the first save from the default branch (spec §6): names the work branch tests/<username>-<slug>. */
+/** Asked on the first save from the default branch (spec §6): names the work branch tests/<username>/<slug>. */
 export function WorkNameDialog({ open, onOpenChange, username, pending, onConfirm }: WorkNameDialogProps) {
   const [name, setName] = useState('');
   useEffect(() => {

@@ -36,7 +36,7 @@ interface EditorPanelProps {
   path: string;
   /** A file made with "New file" that doesn't exist in GitLab yet. */
   isNew: boolean;
-  /** The user's GitLab username: their work branches are tests/<username>-<slug>. */
+  /** The user's GitLab username: their work branches are tests/<username>/<slug>. */
   username: string;
   onSaved: (result: SaveFileResult) => void;
   onDirtyChange: (dirty: boolean) => void;
@@ -89,7 +89,11 @@ export function EditorPanel({ projectId, branch, path, isNew, username, onSaved,
         base: { path, ref: result.branch, content, lastCommitId: result.commitId, size: byteLength(content), readOnly: false },
         draft: content,
       });
-      toast.success(`Saved to ${result.branch}`);
+      toast.success(
+        result.mergeRequest
+          ? `Saved to ${result.branch}`
+          : `Saved to ${result.branch}. The merge request couldn't be updated – it will be retried on your next save.`,
+      );
       onSaved(result);
     } catch (e) {
       if (e instanceof ApiError && e.status === 409) {
@@ -125,7 +129,23 @@ export function EditorPanel({ projectId, branch, path, isNew, username, onSaved,
   }
 
   if (!current) {
-    if (file.isError) return <ErrorState error={file.error} onRetry={() => file.refetch()} />;
+    if (file.isError) {
+      // 413: the file is too large to open here at all (spec §6), distinct from the >1 MB read-only case
+      // (which still opens, just not editable). Show it inline instead of the generic error/retry state.
+      if (file.error instanceof ApiError && file.error.status === 413) {
+        return (
+          <div className="space-y-3">
+            <p className="min-w-0 flex-1 truncate font-mono text-sm" title={path}>
+              {path}
+            </p>
+            <p role="status" className="rounded-md bg-muted px-3 py-2 text-sm text-muted-foreground">
+              {file.error.message}
+            </p>
+          </div>
+        );
+      }
+      return <ErrorState error={file.error} onRetry={() => file.refetch()} />;
+    }
     return <LoadingState label="Opening file…" />;
   }
 
@@ -154,7 +174,7 @@ export function EditorPanel({ projectId, branch, path, isNew, username, onSaved,
       )}
       {readOnly && (
         <p role="status" className="rounded-md bg-muted px-3 py-2 text-sm text-muted-foreground">
-          This file is larger than 1 MB, so it opens read-only. Edit it in GitLab.
+          This file is read-only here (larger than 1 MB, not a .ts/.js file, or not UTF-8 text). Edit it in GitLab.
         </p>
       )}
       {conflict && (

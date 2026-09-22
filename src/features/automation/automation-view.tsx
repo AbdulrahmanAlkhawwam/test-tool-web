@@ -22,7 +22,7 @@ import { RunTestsDialog } from './run-tests-dialog';
 interface AutomationViewProps {
   project: ProjectDetail;
   repo: RepositoryLink;
-  /** The current user's GitLab username (their work branches are tests/<username>-<slug>). */
+  /** The current user's GitLab username (their work branches are tests/<username>/<slug>). */
   username: string;
 }
 

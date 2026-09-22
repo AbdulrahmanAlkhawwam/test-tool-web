@@ -27,8 +27,8 @@ describe('RunTestsDialog', () => {
     renderWithClient(<RunTestsDialog project={linkedProject} repo={repo} />);
 
     await user.click(screen.getByRole('button', { name: 'Run tests' }));
-    await screen.findByRole('option', { name: /tests\/amina-login-fixes/ });
-    await user.selectOptions(screen.getByLabelText('Branch'), 'tests/amina-login-fixes');
+    await screen.findByRole('option', { name: /tests\/amina\/login-fixes/ });
+    await user.selectOptions(screen.getByLabelText('Branch'), 'tests/amina/login-fixes');
     await user.click(screen.getByLabelText('A folder or file'));
     const path = screen.getByLabelText('Folder or file');
     await user.clear(path);
@@ -37,7 +37,7 @@ describe('RunTestsDialog', () => {
 
     await waitFor(() => expect(push).toHaveBeenCalledWith('/projects/NINJA/runs/run9'));
     expect(callsTo('POST', '/projects/p1/runs/automated')[0].body).toEqual({
-      branch: 'tests/amina-login-fixes',
+      branch: 'tests/amina/login-fixes',
       scope: { mode: 'PATH', path: 'e2e/auth' },
     });
   });

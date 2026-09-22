@@ -24,19 +24,21 @@ describe('gitlab paths', () => {
   });
 
   it('names work branches and recognises the user’s own', () => {
-    expect(workBranchName('amina', 'login-fixes')).toBe('tests/amina-login-fixes');
-    expect(workBranchName('Tess.Dev', 'x')).toBe('tests/tess.dev-x');
-    expect(slugFromWorkBranch('tests/tess.dev-x', 'Tess.Dev')).toBe('x');
-    expect(slugFromWorkBranch('tests/amina-login-fixes', 'amina')).toBe('login-fixes');
-    expect(slugFromWorkBranch('tests/omar-login-fixes', 'amina')).toBeNull();
-    expect(slugFromWorkBranch('tests/amina-', 'amina')).toBeNull();
+    expect(workBranchName('amina', 'login-fixes')).toBe('tests/amina/login-fixes');
+    expect(workBranchName('Tess.Dev', 'x')).toBe('tests/tess.dev/x');
+    expect(slugFromWorkBranch('tests/tess.dev/x', 'Tess.Dev')).toBe('x');
+    expect(slugFromWorkBranch('tests/amina/login-fixes', 'amina')).toBe('login-fixes');
+    expect(slugFromWorkBranch('tests/omar/login-fixes', 'amina')).toBeNull();
+    expect(slugFromWorkBranch('tests/amina/', 'amina')).toBeNull();
     expect(slugFromWorkBranch('main', 'amina')).toBeNull();
+    // "tess" must not be treated as a prefix of "tess-dev": the "/" after the username is the real boundary.
+    expect(slugFromWorkBranch('tests/tess-dev/foo', 'tess')).toBeNull();
   });
 
   it('opens the user’s work branch first, else the default branch', () => {
-    const closed = { ...workBranch, name: 'tests/amina-old', mergeRequest: { ...mergeRequest, state: 'merged' as const } };
-    expect(initialBranch([mainBranch, closed, workBranch], 'amina', 'main')).toBe('tests/amina-login-fixes');
-    expect(initialBranch([mainBranch, closed], 'amina', 'main')).toBe('tests/amina-old');
+    const closed = { ...workBranch, name: 'tests/amina/old', mergeRequest: { ...mergeRequest, state: 'merged' as const } };
+    expect(initialBranch([mainBranch, closed, workBranch], 'amina', 'main')).toBe('tests/amina/login-fixes');
+    expect(initialBranch([mainBranch, closed], 'amina', 'main')).toBe('tests/amina/old');
     expect(initialBranch([mainBranch, workBranch], 'omar', 'main')).toBe('main');
     expect(initialBranch([], 'amina', 'develop')).toBe('develop');
   });

@@ -126,7 +126,7 @@ describe('GitLab API hooks', () => {
   });
 
   it('saves a file to the work branch and caches the saved version there', async () => {
-    const saved = { branch: 'tests/amina-login-fixes', commitId: 'c2', mergeRequest };
+    const saved = { branch: 'tests/amina/login-fixes', commitId: 'c2', mergeRequest };
     const { callsTo } = mockRoutes({ 'PUT /projects/p1/automation/file': saved });
     const { queryClient, wrapper } = createWrapper();
     const { result } = renderHook(() => useSaveAutomationFile('p1'), { wrapper });
@@ -135,9 +135,9 @@ describe('GitLab API hooks', () => {
       await expect(result.current.mutateAsync(input)).resolves.toEqual(saved);
     });
     expect(callsTo('PUT', '/projects/p1/automation/file')[0].body).toEqual(input);
-    expect(queryClient.getQueryData(automationKeys.file('p1', 'tests/amina-login-fixes', 'e2e/login.spec.ts'))).toEqual({
+    expect(queryClient.getQueryData(automationKeys.file('p1', 'tests/amina/login-fixes', 'e2e/login.spec.ts'))).toEqual({
       path: 'e2e/login.spec.ts',
-      ref: 'tests/amina-login-fixes',
+      ref: 'tests/amina/login-fixes',
       content: 'test()',
       lastCommitId: 'c2',
       size: 6,

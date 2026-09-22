@@ -13,7 +13,7 @@ vi.mock('./code-editor', () => import('@/test/code-editor-mock'));
 
 const trees: Record<string, AutomationTreeEntry[]> = {
   main: [{ path: 'e2e/home.spec.ts', name: 'home.spec.ts', type: 'blob' }],
-  'tests/amina-login-fixes': [
+  'tests/amina/login-fixes': [
     { path: 'e2e/auth', name: 'auth', type: 'tree' },
     { path: 'e2e/auth/login.spec.ts', name: 'login.spec.ts', type: 'blob' },
     { path: 'e2e/home.spec.ts', name: 'home.spec.ts', type: 'blob' },
@@ -42,9 +42,9 @@ describe('AutomationView', () => {
     renderWithClient(<AutomationView project={linkedProject} repo={repo} username="amina" />);
 
     expect(await screen.findByRole('button', { name: /login\.spec\.ts/ })).toBeInTheDocument();
-    expect(screen.getByLabelText('Branch')).toHaveValue('tests/amina-login-fixes');
+    expect(screen.getByLabelText('Branch')).toHaveValue('tests/amina/login-fixes');
     expect(screen.getByRole('link', { name: /Merge request !7/ })).toHaveAttribute('href', mergeRequest.webUrl);
-    expect(callsTo('GET', '/projects/p1/automation/tree').map((c) => c.query.ref)).toEqual(['tests/amina-login-fixes']);
+    expect(callsTo('GET', '/projects/p1/automation/tree').map((c) => c.query.ref)).toEqual(['tests/amina/login-fixes']);
   });
 
   it("shows another branch's files after switching branches", async () => {
@@ -94,9 +94,37 @@ describe('AutomationView', () => {
     expect(callsTo('PUT', '/projects/p1/automation/file')[0].body).toMatchObject({ path: 'e2e/home.spec.ts', branchSlug: 'login-fixes' });
   });
 
+  it('switches to the new work branch after a save whose merge request update failed, without crashing', async () => {
+    let saved = false;
+    mockRoutes({
+      ...panelRoutes,
+      'GET /projects/p1/automation/branches': () =>
+        saved ? branchList(mainBranch, { ...workBranch, mergeRequest: null }) : branchList(mainBranch),
+      'GET /projects/p1/automation/tree': treeRoute,
+      'GET /projects/p1/automation/file': ({ query }: MockCall) =>
+        query.ref === workBranch.name ? fileAt(workBranch.name, 'new', 'c2') : fileAt('main', 'old', 'c1'),
+      'PUT /projects/p1/automation/file': () => {
+        saved = true;
+        return { branch: workBranch.name, commitId: 'c2', mergeRequest: null };
+      },
+    });
+    const user = userEvent.setup();
+    renderWithClient(<AutomationView project={linkedProject} repo={repo} username="amina" />);
+
+    await user.click(await screen.findByRole('button', { name: /home\.spec\.ts/ }));
+    fireEvent.change(await screen.findByLabelText('Code editor'), { target: { value: 'new' } });
+    await user.click(screen.getByRole('button', { name: 'Save' }));
+    await user.type(await screen.findByLabelText('Work name'), 'Login fixes');
+    await user.click(screen.getByRole('button', { name: 'Save to my branch' }));
+
+    expect(await screen.findByLabelText('Code editor')).toHaveValue('new');
+    expect(screen.getByLabelText('Branch')).toHaveValue(workBranch.name);
+    expect(screen.queryByRole('link', { name: /Merge request/ })).not.toBeInTheDocument();
+  });
+
   it('re-expands the top-level folders when returning to a previously visited (cached) branch', async () => {
     const localTrees: Record<string, AutomationTreeEntry[]> = {
-      'tests/amina-login-fixes': [
+      'tests/amina/login-fixes': [
         { path: 'e2e/auth', name: 'auth', type: 'tree' },
         { path: 'e2e/auth/login.spec.ts', name: 'login.spec.ts', type: 'blob' },
       ],

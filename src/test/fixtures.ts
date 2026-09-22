@@ -37,7 +37,7 @@ export const unlinkedProject: ProjectDetail = {
 export const linkedProject: ProjectDetail = { ...unlinkedProject, ...repo };
 
 export const mainBranch: AutomationBranch = { name: 'main', isDefault: true, mergeRequest: null };
-export const workBranch: AutomationBranch = { name: 'tests/amina-login-fixes', isDefault: false, mergeRequest };
+export const workBranch: AutomationBranch = { name: 'tests/amina/login-fixes', isDefault: false, mergeRequest };
 
 /** GET …/automation/branches body. */
 export const branchList = (...branches: AutomationBranch[]): AutomationBranches => ({ defaultBranch: 'main', branches });

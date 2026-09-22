@@ -1,6 +1,7 @@
 import { fireEvent, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import type { ComponentProps } from 'react';
+import { toast } from 'sonner';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { apiError, mockRoutes } from '@/test/fetch-routes';
 import { fileAt, mergeRequest } from '@/test/fixtures';
@@ -13,7 +14,7 @@ vi.mock('./code-editor', () => import('@/test/code-editor-mock'));
 const FILE = 'e2e/auth/login.spec.ts';
 const FILE_ROUTE = 'GET /projects/p1/automation/file';
 const SAVE_ROUTE = 'PUT /projects/p1/automation/file';
-const saved = { branch: 'tests/amina-login-fixes', commitId: 'c2', mergeRequest };
+const saved = { branch: 'tests/amina/login-fixes', commitId: 'c2', mergeRequest };
 
 function renderPanel(props: Partial<ComponentProps<typeof EditorPanel>> = {}) {
   const onSaved = vi.fn();
@@ -39,7 +40,7 @@ describe('EditorPanel', () => {
     fireEvent.change(editor, { target: { value: 'new' } });
     await user.click(screen.getByRole('button', { name: 'Save' }));
     await user.type(await screen.findByLabelText('Work name'), 'Login fixes');
-    expect(screen.getByText('tests/amina-login-fixes')).toBeInTheDocument();
+    expect(screen.getByText('tests/amina/login-fixes')).toBeInTheDocument();
     await user.click(screen.getByRole('button', { name: 'Save to my branch' }));
 
     await waitFor(() => expect(onSaved).toHaveBeenCalledWith(saved));
@@ -52,8 +53,8 @@ describe('EditorPanel', () => {
   });
 
   it("saves straight to the user's work branch without asking", async () => {
-    const { callsTo } = mockRoutes({ [FILE_ROUTE]: fileAt('tests/amina-login-fixes', 'old', 'c1'), [SAVE_ROUTE]: saved });
-    const { onSaved, user } = renderPanel({ branch: 'tests/amina-login-fixes' });
+    const { callsTo } = mockRoutes({ [FILE_ROUTE]: fileAt('tests/amina/login-fixes', 'old', 'c1'), [SAVE_ROUTE]: saved });
+    const { onSaved, user } = renderPanel({ branch: 'tests/amina/login-fixes' });
 
     fireEvent.change(await screen.findByLabelText('Code editor'), { target: { value: 'new' } });
     await user.click(screen.getByRole('button', { name: 'Save' }));
@@ -66,10 +67,10 @@ describe('EditorPanel', () => {
   it('shows the stale-file message on 409 and reloads the latest version', async () => {
     let reads = 0;
     mockRoutes({
-      [FILE_ROUTE]: () => (reads++ === 0 ? fileAt('tests/amina-login-fixes', 'old', 'c1') : fileAt('tests/amina-login-fixes', 'theirs', 'c3')),
+      [FILE_ROUTE]: () => (reads++ === 0 ? fileAt('tests/amina/login-fixes', 'old', 'c1') : fileAt('tests/amina/login-fixes', 'theirs', 'c3')),
       [SAVE_ROUTE]: () => apiError(409, 'This file changed on the branch – reload it before saving'),
     });
-    const { onSaved, user } = renderPanel({ branch: 'tests/amina-login-fixes' });
+    const { onSaved, user } = renderPanel({ branch: 'tests/amina/login-fixes' });
 
     fireEvent.change(await screen.findByLabelText('Code editor'), { target: { value: 'mine' } });
     await user.click(screen.getByRole('button', { name: 'Save' }));
@@ -95,8 +96,8 @@ describe('EditorPanel', () => {
     const pendingSave = new Promise((resolve) => {
       resolveSave = resolve;
     });
-    mockRoutes({ [FILE_ROUTE]: fileAt('tests/amina-login-fixes', 'old', 'c1'), [SAVE_ROUTE]: () => pendingSave });
-    const { user } = renderPanel({ branch: 'tests/amina-login-fixes' });
+    mockRoutes({ [FILE_ROUTE]: fileAt('tests/amina/login-fixes', 'old', 'c1'), [SAVE_ROUTE]: () => pendingSave });
+    const { user } = renderPanel({ branch: 'tests/amina/login-fixes' });
 
     const editor = await screen.findByLabelText('Code editor');
     fireEvent.change(editor, { target: { value: 'new' } });
@@ -110,5 +111,31 @@ describe('EditorPanel', () => {
 
     await waitFor(() => expect(screen.getByLabelText('Code editor')).not.toHaveAttribute('readonly'));
     expect(screen.getByLabelText('Code editor')).toHaveValue('new');
+  });
+
+  it('saves normally even when the merge request could not be updated', async () => {
+    const savedNoMr = { branch: 'tests/amina/login-fixes', commitId: 'c2', mergeRequest: null };
+    mockRoutes({ [FILE_ROUTE]: fileAt('tests/amina/login-fixes', 'old', 'c1'), [SAVE_ROUTE]: savedNoMr });
+    const { onSaved, user } = renderPanel({ branch: 'tests/amina/login-fixes' });
+
+    fireEvent.change(await screen.findByLabelText('Code editor'), { target: { value: 'new' } });
+    await user.click(screen.getByRole('button', { name: 'Save' }));
+
+    await waitFor(() => expect(onSaved).toHaveBeenCalledWith(savedNoMr));
+    expect(toast.success).toHaveBeenCalledWith(
+      "Saved to tests/amina/login-fixes. The merge request couldn't be updated – it will be retried on your next save.",
+    );
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+    expect(screen.getByLabelText('Code editor')).toHaveValue('new');
+  });
+
+  it('shows the too-large-to-open message inline instead of a generic error', async () => {
+    mockRoutes({ [FILE_ROUTE]: () => apiError(413, "Files larger than 5 MB can't be opened here") });
+    renderPanel();
+
+    expect(await screen.findByText("Files larger than 5 MB can't be opened here")).toBeInTheDocument();
+    expect(screen.queryByLabelText('Code editor')).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Try again' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Save' })).not.toBeInTheDocument();
   });
 });

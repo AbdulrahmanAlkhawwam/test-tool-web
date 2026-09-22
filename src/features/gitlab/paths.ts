@@ -15,16 +15,16 @@ export function slugify(name: string): string {
     .replace(/-+$/, '');
 }
 
-/** `tests/<username>-`, with the username normalized exactly like the API's workBranchPrefix. */
+/** `tests/<username>/`, with the username normalized exactly like the API's workBranchPrefix. */
 export function workBranchPrefix(username: string): string {
-  return `tests/${username.toLowerCase().replace(/[^a-z0-9._-]+/g, '-')}-`;
+  return `tests/${username.toLowerCase().replace(/[^a-z0-9._-]+/g, '-')}/`;
 }
 
 export function workBranchName(username: string, slug: string): string {
   return `${workBranchPrefix(username)}${slug}`;
 }
 
-/** The slug of one of the user's work branches (`tests/<username>-<slug>`), or null for any other branch. */
+/** The slug of one of the user's work branches (`tests/<username>/<slug>`), or null for any other branch. */
 export function slugFromWorkBranch(branch: string, username: string): string | null {
   const prefix = workBranchPrefix(username);
   return branch.startsWith(prefix) && branch.length > prefix.length ? branch.slice(prefix.length) : null;
