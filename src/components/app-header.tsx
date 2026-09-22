@@ -4,6 +4,8 @@ import { ChevronDown, LogOut, UserRound } from 'lucide-react';
 import Image from 'next/image';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
+import { useState } from 'react';
+import { ConfirmDialog } from '@/components/confirm-dialog';
 import { Button } from '@/components/ui/button';
 import {
   DropdownMenu,
@@ -13,12 +15,20 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
+import { useUnsavedChanges } from '@/lib/unsaved-changes';
 import { cn } from '@/lib/utils';
 import { useAuth } from '@/providers/auth-provider';
 
 export function AppHeader() {
   const { user, isAdmin, logout } = useAuth();
   const pathname = usePathname();
+  const hasUnsavedChanges = useUnsavedChanges();
+  const [confirmLogout, setConfirmLogout] = useState(false);
+
+  function requestLogout() {
+    if (hasUnsavedChanges) setConfirmLogout(true);
+    else void logout().catch(() => undefined);
+  }
   const links = [
     { href: '/', label: 'Projects', active: pathname === '/' || pathname.startsWith('/projects') },
     ...(isAdmin ? [{ href: '/admin/users', label: 'Users', active: pathname.startsWith('/admin') }] : []),
@@ -67,7 +77,7 @@ export function AppHeader() {
               <DropdownMenuItem asChild>
                 <Link href="/profile">Profile & password</Link>
               </DropdownMenuItem>
-              <DropdownMenuItem onSelect={() => void logout().catch(() => undefined)}>
+              <DropdownMenuItem onSelect={requestLogout}>
                 <LogOut className="mr-2 h-4 w-4" aria-hidden />
                 Log out
               </DropdownMenuItem>
@@ -75,6 +85,18 @@ export function AppHeader() {
           </DropdownMenu>
         </div>
       </div>
+      <ConfirmDialog
+        open={confirmLogout}
+        onOpenChange={setConfirmLogout}
+        title="Discard unsaved changes?"
+        description="You have unsaved changes in the Automation editor. Logging out now will discard them."
+        confirmLabel="Log out"
+        destructive
+        onConfirm={() => {
+          setConfirmLogout(false);
+          void logout().catch(() => undefined);
+        }}
+      />
     </header>
   );
 }

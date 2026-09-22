@@ -42,6 +42,32 @@ export default function AutomationPage({ params }: { params: { key: string } }) 
             to keep saving. Your unsaved changes are still here — copy them if you need to.
           </p>
         )}
+        {access.state === 'connect' && (
+          <p role="alert" className="flex flex-wrap items-center gap-2 rounded-md bg-status-blocked/15 px-3 py-2 text-sm text-status-blocked-fg">
+            <AlertTriangle className="h-4 w-4 shrink-0" aria-hidden />
+            GitLab was disconnected.
+            <Button asChild variant="link" size="sm" className="h-auto p-0 text-status-blocked-fg">
+              <Link href="/profile">Connect on Profile</Link>
+            </Button>
+            to keep saving. Your unsaved changes are still here — copy them if you need to.
+          </p>
+        )}
+        {access.state === 'hidden' && (
+          <p role="alert" className="flex flex-wrap items-center gap-2 rounded-md bg-status-blocked/15 px-3 py-2 text-sm text-status-blocked-fg">
+            <AlertTriangle className="h-4 w-4 shrink-0" aria-hidden />
+            {access.reason === 'disabled' ? (
+              'GitLab automation was turned off on this server.'
+            ) : (
+              <>
+                This project&apos;s GitLab repository was unlinked.
+                <Button asChild variant="link" size="sm" className="h-auto p-0 text-status-blocked-fg">
+                  <Link href={`/projects/${project.data.key}/settings`}>Relink it in Settings</Link>
+                </Button>
+              </>
+            )}
+            {' '}Saving won&apos;t work until then. Your unsaved changes are still here — copy them if you need to.
+          </p>
+        )}
         {access.state === 'ready' && gitlab.isError && (
           <p role="status" className="flex flex-wrap items-center gap-2 rounded-md bg-status-blocked/15 px-3 py-2 text-sm text-status-blocked-fg">
             Couldn&apos;t refresh GitLab status – retrying.

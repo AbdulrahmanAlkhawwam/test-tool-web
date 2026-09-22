@@ -3,6 +3,7 @@ import userEvent from '@testing-library/user-event';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { automationKeys } from '@/features/gitlab/api';
 import type { AutomationTreeEntry } from '@/lib/types';
+import { useUnsavedChanges } from '@/lib/unsaved-changes';
 import { apiError, mockRoutes, type MockCall } from '@/test/fetch-routes';
 import { branchList, fileAt, linkedProject, mainBranch, mergeRequest, repo, treeAt, workBranch } from '@/test/fixtures';
 import { renderWithClient } from '@/test/render';
@@ -370,5 +371,93 @@ describe('AutomationView', () => {
     await user.click(screen.getByRole('link', { name: 'External' }));
     expect(screen.queryByText('Discard unsaved changes?')).not.toBeInTheDocument();
     expect(push).not.toHaveBeenCalled();
+  });
+
+  it('does not intercept a hash-only same-page link or a download link, even while dirty', async () => {
+    mockRoutes({
+      ...panelRoutes,
+      'GET /projects/p1/automation/branches': branchList(mainBranch, workBranch),
+      'GET /projects/p1/automation/tree': treeRoute,
+      'GET /projects/p1/automation/file': fileAt(workBranch.name, 'login content', 'c1', { path: 'e2e/auth/login.spec.ts' }),
+    });
+    const user = userEvent.setup();
+    renderWithClient(
+      <>
+        <a href="#section">Jump</a>
+        <a href="/report.pdf" download onClick={(e) => e.preventDefault()}>
+          Download
+        </a>
+        <AutomationView project={linkedProject} repo={repo} username="amina" />
+      </>,
+    );
+
+    await user.click(await screen.findByRole('button', { name: /login\.spec\.ts/ }));
+    fireEvent.change(await screen.findByLabelText('Code editor'), { target: { value: 'dirty edit' } });
+
+    await user.click(screen.getByRole('link', { name: 'Jump' }));
+    expect(screen.queryByText('Discard unsaved changes?')).not.toBeInTheDocument();
+
+    await user.click(screen.getByRole('link', { name: 'Download' }));
+    expect(screen.queryByText('Discard unsaved changes?')).not.toBeInTheDocument();
+    expect(push).not.toHaveBeenCalled();
+  });
+
+  it('does not show the branch-missing banner for a failed branches refetch right after a save', async () => {
+    let branchesCalls = 0;
+    mockRoutes({
+      ...panelRoutes,
+      // Call 1 is the initial load (before the save, so naturally without the not-yet-created work
+      // branch). Call 2 is the refetch the save's onSuccess triggers, and it fails outright.
+      'GET /projects/p1/automation/branches': () => {
+        branchesCalls++;
+        return branchesCalls === 1 ? branchList(mainBranch) : apiError(500, 'Boom');
+      },
+      'GET /projects/p1/automation/tree': treeRoute,
+      'GET /projects/p1/automation/file': ({ query }: MockCall) =>
+        query.ref === workBranch.name ? fileAt(workBranch.name, 'new', 'c2') : fileAt('main', 'old', 'c1'),
+      'PUT /projects/p1/automation/file': () => ({ branch: workBranch.name, commitId: 'c2', mergeRequest }),
+    });
+    const user = userEvent.setup();
+    renderWithClient(<AutomationView project={linkedProject} repo={repo} username="amina" />);
+
+    await user.click(await screen.findByRole('button', { name: /home\.spec\.ts/ }));
+    fireEvent.change(await screen.findByLabelText('Code editor'), { target: { value: 'new' } });
+    await user.click(screen.getByRole('button', { name: 'Save' }));
+    await user.type(await screen.findByLabelText('Work name'), 'Login fixes');
+    await user.click(screen.getByRole('button', { name: 'Save to my branch' }));
+
+    expect(await screen.findByLabelText('Code editor')).toHaveValue('new');
+    await screen.findByText(/Couldn.t refresh branches/);
+    // The refetch after the save failed and the (pre-save) list still lacks the brand-new branch, but
+    // that must never be read as "this branch was deleted".
+    expect(screen.queryByText(/This branch no longer exists in GitLab/)).not.toBeInTheDocument();
+  });
+
+  it('publishes dirty state to the shared unsaved-changes store, and clears it when it unmounts', async () => {
+    mockRoutes({
+      ...panelRoutes,
+      'GET /projects/p1/automation/branches': branchList(mainBranch, workBranch),
+      'GET /projects/p1/automation/tree': treeRoute,
+      'GET /projects/p1/automation/file': fileAt(workBranch.name, 'login content', 'c1', { path: 'e2e/auth/login.spec.ts' }),
+    });
+    const user = userEvent.setup();
+    function Probe() {
+      return <p data-testid="probe">{useUnsavedChanges() ? 'dirty' : 'clean'}</p>;
+    }
+    const { rerender } = renderWithClient(
+      <>
+        <Probe />
+        <AutomationView project={linkedProject} repo={repo} username="amina" />
+      </>,
+    );
+
+    await user.click(await screen.findByRole('button', { name: /login\.spec\.ts/ }));
+    expect(screen.getByTestId('probe')).toHaveTextContent('clean');
+
+    fireEvent.change(await screen.findByLabelText('Code editor'), { target: { value: 'dirty edit' } });
+    expect(screen.getByTestId('probe')).toHaveTextContent('dirty');
+
+    rerender(<Probe />);
+    expect(screen.getByTestId('probe')).toHaveTextContent('clean');
   });
 });

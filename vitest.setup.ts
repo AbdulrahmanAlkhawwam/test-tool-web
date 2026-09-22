@@ -16,3 +16,12 @@ afterEach(() => {
 // it even though nothing is actually stuck. A longer ceiling avoids flaky failures here while
 // still catching a genuinely broken/hanging query well before it's reached.
 configure({ asyncUtilTimeout: 5000 });
+
+// jsdom has neither the Pointer Capture API nor Element.scrollIntoView. Various Radix primitives
+// (Menu/DropdownMenu, Select, Slider) call these while handling pointer/keyboard interaction, so a
+// component that reaches that code path in a test would throw on the missing method without this.
+for (const name of ['hasPointerCapture', 'setPointerCapture', 'releasePointerCapture', 'scrollIntoView'] as const) {
+  if (!(name in Element.prototype)) {
+    Object.defineProperty(Element.prototype, name, { value: () => undefined, writable: true, configurable: true });
+  }
+}

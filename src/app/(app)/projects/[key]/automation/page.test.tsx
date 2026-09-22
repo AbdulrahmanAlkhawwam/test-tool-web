@@ -2,6 +2,7 @@ import { act, fireEvent, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { gitlabKeys } from '@/features/gitlab/api';
+import { projectKeys } from '@/features/projects/api';
 import type { AutomationTreeEntry } from '@/lib/types';
 import { apiError, mockRoutes, type MockCall } from '@/test/fetch-routes';
 import { fileAt, linkedProject, mainBranch, treeAt, unlinkedProject, workBranch } from '@/test/fixtures';
@@ -111,5 +112,68 @@ describe('AutomationPage draft safety', () => {
 
     expect(await screen.findByText("Automation isn't set up for this project")).toBeInTheDocument();
     expect(screen.getByText(/Settings → Repository/)).toBeInTheDocument();
+  });
+
+  it('shows a "disconnected" banner (not a full swap) when GitLab is disconnected elsewhere after the view has loaded', async () => {
+    let disconnected = false;
+    mockRoutes({
+      ...panelRoutes,
+      'GET /projects/NINJA': linkedProject,
+      'GET /gitlab/status': () => (disconnected ? { enabled: true, connection: null } : ACTIVE),
+      'GET /projects/p1/automation/branches': { defaultBranch: 'main', branches: [mainBranch, workBranch] },
+      'GET /projects/p1/automation/tree': treeRoute,
+      'GET /projects/p1/automation/file': fileAt(workBranch.name, 'login content', 'c1', { path: 'e2e/auth/login.spec.ts' }),
+    });
+    const { queryClient } = renderWithClient(<AutomationPage params={{ key: 'NINJA' }} />);
+    await openDirtyEditor();
+
+    disconnected = true;
+    await act(() => queryClient.refetchQueries({ queryKey: gitlabKeys.status }));
+
+    expect(await screen.findByRole('alert')).toHaveTextContent('GitLab was disconnected');
+    expect(screen.getByRole('link', { name: 'Connect on Profile' })).toHaveAttribute('href', '/profile');
+    expect(screen.getByLabelText('Code editor')).toHaveValue('dirty edit');
+    expect(screen.queryByRole('link', { name: 'Connect GitLab' })).not.toBeInTheDocument();
+  });
+
+  it('shows a "repository unlinked" banner (not a full swap) when the repo is unlinked elsewhere after the view has loaded', async () => {
+    let unlinked = false;
+    mockRoutes({
+      ...panelRoutes,
+      'GET /projects/NINJA': () => (unlinked ? unlinkedProject : linkedProject),
+      'GET /gitlab/status': ACTIVE,
+      'GET /projects/p1/automation/branches': { defaultBranch: 'main', branches: [mainBranch, workBranch] },
+      'GET /projects/p1/automation/tree': treeRoute,
+      'GET /projects/p1/automation/file': fileAt(workBranch.name, 'login content', 'c1', { path: 'e2e/auth/login.spec.ts' }),
+    });
+    const { queryClient } = renderWithClient(<AutomationPage params={{ key: 'NINJA' }} />);
+    await openDirtyEditor();
+
+    unlinked = true;
+    await act(() => queryClient.refetchQueries({ queryKey: projectKeys.detail('NINJA') }));
+
+    expect(await screen.findByRole('alert')).toHaveTextContent("This project's GitLab repository was unlinked");
+    expect(screen.getByRole('link', { name: 'Relink it in Settings' })).toHaveAttribute('href', '/projects/NINJA/settings');
+    expect(screen.getByLabelText('Code editor')).toHaveValue('dirty edit');
+  });
+
+  it('shows a "turned off" banner (not a full swap) when GitLab is disabled elsewhere after the view has loaded', async () => {
+    let disabled = false;
+    mockRoutes({
+      ...panelRoutes,
+      'GET /projects/NINJA': linkedProject,
+      'GET /gitlab/status': () => (disabled ? { enabled: false, connection: null } : ACTIVE),
+      'GET /projects/p1/automation/branches': { defaultBranch: 'main', branches: [mainBranch, workBranch] },
+      'GET /projects/p1/automation/tree': treeRoute,
+      'GET /projects/p1/automation/file': fileAt(workBranch.name, 'login content', 'c1', { path: 'e2e/auth/login.spec.ts' }),
+    });
+    const { queryClient } = renderWithClient(<AutomationPage params={{ key: 'NINJA' }} />);
+    await openDirtyEditor();
+
+    disabled = true;
+    await act(() => queryClient.refetchQueries({ queryKey: gitlabKeys.status }));
+
+    expect(await screen.findByRole('alert')).toHaveTextContent('GitLab automation was turned off on this server');
+    expect(screen.getByLabelText('Code editor')).toHaveValue('dirty edit');
   });
 });

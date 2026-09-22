@@ -10,6 +10,7 @@ import { useAutomationBranches, useAutomationTree, useCoverage } from '@/feature
 import { initialBranch, normalizeFolder } from '@/features/gitlab/paths';
 import { safeExternalHref } from '@/lib/safe-external-href';
 import type { ProjectDetail, RepositoryLink, SaveFileResult } from '@/lib/types';
+import { setUnsavedChanges } from '@/lib/unsaved-changes';
 import { BranchSelect } from './branch-select';
 import { CiSnippet } from './ci-snippet';
 import { CoverageSection } from './coverage-section';
@@ -68,9 +69,11 @@ export function AutomationView({ project, repo, username }: AutomationViewProps)
     () => Object.fromEntries((coverage.data?.files ?? []).map((f) => [f.path, f.cases.length])),
     [coverage.data],
   );
-  // Only once branches.data has settled (not mid-fetch) can its absence mean the pinned branch is truly
-  // gone, rather than a save's new work branch not having refetched into the list yet.
-  const branchMissing = !!branch && !!branches.data && !branches.isFetching && !branches.data.branches.some((b) => b.name === branch);
+  // Only once branches.data has settled successfully (not mid-fetch, and not a failed refetch that fell
+  // back to the last-loaded list) can its absence mean the pinned branch is truly gone, rather than a
+  // save's new work branch not having refetched into the list yet, or a transient refetch error.
+  const branchMissing =
+    !!branch && !!branches.data && !branches.isFetching && !branches.isError && !branches.data.branches.some((b) => b.name === branch);
 
   // Warn before leaving the page with unsaved editor changes.
   useEffect(() => {
@@ -83,6 +86,14 @@ export function AutomationView({ project, repo, username }: AutomationViewProps)
     return () => window.removeEventListener('beforeunload', warn);
   }, [dirty]);
 
+  // Publish this view's dirty state to the shared store so unrelated UI (the header's Log out) can ask
+  // for confirmation too, instead of silently discarding the draft. Cleared on unmount so a stale "still
+  // dirty" flag never outlives this view (e.g. after navigating away without going through the guard).
+  useEffect(() => {
+    setUnsavedChanges(dirty);
+  }, [dirty]);
+  useEffect(() => () => setUnsavedChanges(false), []);
+
   // Guard in-app navigation while the editor is dirty: a same-origin, unmodified left-click on an <a
   // href> normally navigates immediately, discarding the draft. Intercept it (capture phase, so it runs
   // before Next's own Link handler) and confirm first. External links and new-tab clicks are left alone.
@@ -91,7 +102,7 @@ export function AutomationView({ project, repo, username }: AutomationViewProps)
     function onClick(e: MouseEvent) {
       if (e.defaultPrevented || e.button !== 0 || e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return;
       const anchor = (e.target as HTMLElement | null)?.closest?.('a[href]') as HTMLAnchorElement | null;
-      if (!anchor || anchor.target === '_blank') return;
+      if (!anchor || anchor.target === '_blank' || anchor.hasAttribute('download')) return;
       let url: URL;
       try {
         url = new URL(anchor.href, window.location.href);
@@ -99,6 +110,9 @@ export function AutomationView({ project, repo, username }: AutomationViewProps)
         return;
       }
       if (url.origin !== window.location.origin) return;
+      // A hash-only jump on the current page (e.g. <a href="#section">, or the same path with a
+      // different/no hash) doesn't navigate away, so there's nothing to guard.
+      if (url.pathname === window.location.pathname && url.search === window.location.search) return;
       e.preventDefault();
       // Stop the event here (capture phase, before it reaches the link): otherwise it would still bubble
       // up to Next's own Link click handler, which navigates regardless of an earlier preventDefault.
@@ -122,6 +136,11 @@ export function AutomationView({ project, repo, username }: AutomationViewProps)
     } else if (change.kind === 'file') {
       setOpenFile(change.file);
     } else {
+      // Clear dirty (and the shared store) before navigating away, not after: the confirm just given
+      // is the explicit "yes, discard" the store's consumers (e.g. the header's Log out) are for, so
+      // nothing should still see this view as dirty once that navigation is under way.
+      setDirty(false);
+      setUnsavedChanges(false);
       router.push(change.href);
       return;
     }
