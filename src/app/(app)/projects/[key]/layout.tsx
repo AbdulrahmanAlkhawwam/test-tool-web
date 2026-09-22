@@ -5,6 +5,7 @@ import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { ErrorState, LoadingState } from '@/components/page-state';
 import { Badge } from '@/components/ui/badge';
+import { Button } from '@/components/ui/button';
 import { automationAccess } from '@/features/gitlab/access';
 import { useGitlabStatus } from '@/features/gitlab/api';
 import { useProject } from '@/features/projects/api';
@@ -26,18 +27,25 @@ export default function ProjectLayout({ children, params }: { children: React.Re
   const pathname = usePathname();
 
   if (project.isPending) return <LoadingState />;
-  if (project.isError) {
-    if (project.error instanceof ApiError && project.error.status === 404) {
-      return (
-        <div className="py-16 text-center">
-          <p className="font-medium">Project not found</p>
-          <Link href="/" className="text-sm text-primary underline-offset-4 hover:underline">
-            Back to projects
-          </Link>
-        </div>
-      );
+  // Only show a full-page error/not-found state when the project has never loaded. Once it has,
+  // a background refetch failure (e.g. the network drops after the laptop sleeps) falls through to a
+  // small banner below instead — swapping in an error page would unmount any open page underneath,
+  // e.g. the Automation tab's editor, losing unsaved text.
+  if (!project.data) {
+    if (project.isError) {
+      if (project.error instanceof ApiError && project.error.status === 404) {
+        return (
+          <div className="py-16 text-center">
+            <p className="font-medium">Project not found</p>
+            <Link href="/" className="text-sm text-primary underline-offset-4 hover:underline">
+              Back to projects
+            </Link>
+          </div>
+        );
+      }
+      return <ErrorState error={project.error} onRetry={() => project.refetch()} />;
     }
-    return <ErrorState error={project.error} onRetry={() => project.refetch()} />;
+    return <LoadingState />;
   }
 
   // GitLab UI appears only while GitLab is enabled and the project is linked (spec §10).
@@ -48,6 +56,14 @@ export default function ProjectLayout({ children, params }: { children: React.Re
 
   return (
     <div className="space-y-5">
+      {project.isError && (
+        <p role="status" className="flex flex-wrap items-center gap-2 rounded-md bg-status-blocked/15 px-3 py-2 text-sm text-status-blocked-fg">
+          Couldn&apos;t refresh this project – showing the last loaded data.
+          <Button variant="link" size="sm" className="h-auto p-0 text-status-blocked-fg" disabled={project.isFetching} onClick={() => void project.refetch()}>
+            {project.isFetching ? 'Retrying…' : 'Retry'}
+          </Button>
+        </p>
+      )}
       <div>
         <Link href="/" className="text-xs text-muted-foreground hover:text-foreground">
           Projects

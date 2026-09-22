@@ -60,7 +60,15 @@ export function RunTestsDialog({ project, repo, initialBranch, initialPath, trig
     try {
       const run = await start.mutateAsync({ branch, scope: buildScope(scope) });
       setOpen(false);
-      router.push(`/projects/${project.key}/runs/${run.id}`);
+      const runHref = `/projects/${project.key}/runs/${run.id}`;
+      if (dirty) {
+        // Don't navigate away from a dirty editor just because a pipeline started: that would discard
+        // the draft the same way the old direct router.push did. Stay put and let the user open the run
+        // when they're ready (spec: unsaved changes are never silently lost).
+        toast.success('Pipeline started', { action: { label: 'Open run', onClick: () => router.push(runHref) } });
+      } else {
+        router.push(runHref);
+      }
     } catch (err) {
       toast.error(err instanceof ApiError ? err.message : 'Could not start the tests');
     }
@@ -70,8 +78,7 @@ export function RunTestsDialog({ project, repo, initialBranch, initialPath, trig
     e.preventDefault();
     if (!canSubmit) return;
     // The pipeline runs whatever is committed on the branch, not the editor's unsaved draft: confirm
-    // that's expected before starting, instead of silently running stale code (spec: unsaved changes
-    // must never be silently lost or ignored).
+    // that's expected before starting (spec: unsaved changes must never be silently lost or ignored).
     if (dirty) {
       setConfirmStart(true);
       return;
@@ -106,7 +113,8 @@ export function RunTestsDialog({ project, repo, initialBranch, initialPath, trig
             {dirty && (
               <p role="alert" className="flex items-start gap-2 rounded-md bg-status-blocked/10 px-3 py-2 text-sm text-status-blocked-fg">
                 <TriangleAlert className="mt-0.5 h-4 w-4 shrink-0" aria-hidden />
-                Your unsaved changes aren&apos;t included – the pipeline runs the code committed on the branch.
+                The pipeline runs the code committed on the branch, not your unsaved changes – they&apos;ll stay right here in the
+                editor.
               </p>
             )}
             <BranchSelect id="run-tests-branch" branches={branches.data?.branches ?? []} value={branch} onChange={setBranch} />
@@ -169,8 +177,8 @@ export function RunTestsDialog({ project, repo, initialBranch, initialPath, trig
       <ConfirmDialog
         open={confirmStart}
         onOpenChange={setConfirmStart}
-        title="Start without your unsaved changes?"
-        description="Your unsaved changes aren't included – the pipeline runs the code committed on the branch."
+        title="Start the pipeline?"
+        description="It runs the code already committed on the branch, not your unsaved changes here. Your changes stay in the editor and won't be lost."
         confirmLabel="Start pipeline"
         pending={start.isPending}
         onConfirm={() => void runPipeline()}

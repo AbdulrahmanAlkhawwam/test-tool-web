@@ -1,7 +1,7 @@
 'use client';
 
 import { useQueryClient } from '@tanstack/react-query';
-import { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react';
+import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import { api, refreshSession, setAccessToken, setSessionExpiredHandler } from '@/lib/api';
 import type { AuthUser } from '@/lib/types';
 
@@ -22,18 +22,23 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const queryClient = useQueryClient();
   const [user, setUser] = useState<AuthUser | null>(null);
   const [status, setStatus] = useState<AuthStatus>('loading');
+  // Who's signed in, kept even across a sign-out/expiry so the next login can tell whether it's the
+  // same person renewing their session or someone else on the same browser.
+  const previousUserId = useRef<string | null>(null);
 
   useEffect(() => {
     setSessionExpiredHandler(() => {
-      // Don't keep the previous user's data around for whoever signs in next. Mounted queries keep
-      // their last result, so an open page (and any unsaved text on it) stays on screen.
-      queryClient.clear();
-      // While signed in, keep the app mounted and let the layout ask the user to sign in again
-      // instead of tearing the page down (spec §8: typed text is never discarded).
+      // Deliberately NOT queryClient.clear() here. AppLayout keeps the current page mounted while
+      // `expired` (spec: unsaved text is never discarded), but every query still mounted on it (e.g.
+      // the Automation tab's branches/tree/file) would be reset to pending the moment its cache entry
+      // is removed — which unmounts that page's content just as surely as swapping in an error state
+      // would. The cache is cleared instead on an explicit logout, and on the next login if it's for a
+      // different user than before.
       setStatus((prev) => (prev === 'authenticated' || prev === 'expired' ? 'expired' : 'unauthenticated'));
     });
     refreshSession()
       .then((u) => {
+        previousUserId.current = u.id;
         setUser(u);
         setStatus('authenticated');
       })
@@ -41,15 +46,25 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     return () => setSessionExpiredHandler(null);
   }, [queryClient]);
 
-  const login = useCallback(async (email: string, password: string) => {
-    const data = await api<{ accessToken: string; user: AuthUser }>('/auth/login', {
-      method: 'POST',
-      body: { email, password },
-    });
-    setAccessToken(data.accessToken);
-    setUser(data.user);
-    setStatus('authenticated');
-  }, []);
+  const login = useCallback(
+    async (email: string, password: string) => {
+      const data = await api<{ accessToken: string; user: AuthUser }>('/auth/login', {
+        method: 'POST',
+        body: { email, password },
+      });
+      // A different person signing in on this browser must not see the previous person's cached data
+      // (projects, runs, …). Signing back in as the same person (e.g. after "Sign in again" on expiry)
+      // is not that case, so their still-mounted page's queries are left alone.
+      if (previousUserId.current !== null && previousUserId.current !== data.user.id) {
+        queryClient.clear();
+      }
+      previousUserId.current = data.user.id;
+      setAccessToken(data.accessToken);
+      setUser(data.user);
+      setStatus('authenticated');
+    },
+    [queryClient],
+  );
 
   const logout = useCallback(async () => {
     try {
@@ -59,6 +74,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       setUser(null);
       setStatus('unauthenticated');
       queryClient.clear();
+      previousUserId.current = null;
     }
   }, [queryClient]);
 
