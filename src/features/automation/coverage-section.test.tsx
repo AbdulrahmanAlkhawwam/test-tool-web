@@ -43,6 +43,22 @@ describe('CoverageSection', () => {
     expect(callsTo('GET', '/projects/p1/automation/coverage')[0].query).toEqual({ ref: 'main' });
   });
 
+  it('lists files skipped for being over 1 MB', async () => {
+    mockRoutes({ 'GET /projects/p1/automation/coverage': { ...report, skippedFiles: ['e2e/fixtures/huge-data.spec.ts'] } });
+    renderWithClient(<CoverageSection projectId="p1" projectKey="NINJA" gitRef="main" onOpenFile={vi.fn()} />);
+
+    expect(await screen.findByText(/Not scanned \(over 1 MB\)/)).toBeInTheDocument();
+    expect(screen.getByText(/e2e\/fixtures\/huge-data\.spec\.ts/)).toBeInTheDocument();
+  });
+
+  it('shows no "not scanned" note when nothing was skipped', async () => {
+    mockRoutes({ 'GET /projects/p1/automation/coverage': report });
+    renderWithClient(<CoverageSection projectId="p1" projectKey="NINJA" gitRef="main" onOpenFile={vi.fn()} />);
+
+    await screen.findByText(/2 of 3 test cases automated/);
+    expect(screen.queryByText(/Not scanned/)).not.toBeInTheDocument();
+  });
+
   it('lists the cases no test is tagged with yet', async () => {
     mockRoutes({ 'GET /projects/p1/automation/coverage': report });
     renderWithClient(<CoverageSection projectId="p1" projectKey="NINJA" gitRef="main" onOpenFile={vi.fn()} />);

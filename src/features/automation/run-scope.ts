@@ -19,8 +19,12 @@ export function buildScope(state: ScopeState): AutomatedRunScope {
   }
 }
 
+/** GitLab CI variables have a length limit, so the automated run's case-id list is capped (spec: cap case IDs). */
+export const MAX_SCOPE_CASE_IDS = 200;
+
 export function scopeError(state: ScopeState, testsPath: string): string | null {
   if (state.mode === 'CASES' && state.caseIds.length === 0) return 'Choose at least one test case';
+  if (state.mode === 'CASES' && state.caseIds.length > MAX_SCOPE_CASE_IDS) return `Choose at most ${MAX_SCOPE_CASE_IDS} test cases`;
   if (state.mode !== 'PATH') return null;
   const path = normalizeFolder(state.path);
   const root = normalizeFolder(testsPath);

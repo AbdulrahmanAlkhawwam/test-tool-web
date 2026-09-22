@@ -33,6 +33,12 @@ describe('gitlab paths', () => {
     expect(slugFromWorkBranch('main', 'amina')).toBeNull();
     // "tess" must not be treated as a prefix of "tess-dev": the "/" after the username is the real boundary.
     expect(slugFromWorkBranch('tests/tess-dev/foo', 'tess')).toBeNull();
+    // A suffix that isn't itself a valid slug (uppercase, underscores, double dashes, too long) means
+    // this isn't one of the tool's own work branches, even though it shares the tests/<username>/ prefix.
+    expect(slugFromWorkBranch('tests/amina/Login_Fixes', 'amina')).toBeNull();
+    expect(slugFromWorkBranch('tests/amina/login--fixes', 'amina')).toBeNull();
+    expect(slugFromWorkBranch(`tests/amina/${'x'.repeat(41)}`, 'amina')).toBeNull();
+    expect(slugFromWorkBranch(`tests/amina/${'x'.repeat(40)}`, 'amina')).toBe('x'.repeat(40));
   });
 
   it('opens the user’s work branch first, else the default branch', () => {

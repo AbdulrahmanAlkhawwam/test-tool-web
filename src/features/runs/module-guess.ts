@@ -19,10 +19,19 @@ export function guessModuleId(file: string | null | undefined, modules: ModuleRe
   return modules[0]?.id ?? '';
 }
 
-/** A readable case name from an automated test title: drops @tags and extra spaces. */
+/** Test case name max length, matching the create-case-from-result form (spec: create-case name). */
+export const CASE_NAME_MAX_LENGTH = 300;
+
+/**
+ * A readable case name from an automated test title: Playwright joins nested `describe`/`test` titles with
+ * " › ", so only the last segment (the test itself) is kept, then @tags and extra spaces are dropped, and
+ * the result is capped at CASE_NAME_MAX_LENGTH characters.
+ */
 export function caseNameFromTitle(title: string | null | undefined): string {
-  return (title ?? '')
+  const own = (title ?? '').split(' › ').pop() ?? '';
+  return own
     .replace(/@[\w-]+/g, '')
     .replace(/\s+/g, ' ')
-    .trim();
+    .trim()
+    .slice(0, CASE_NAME_MAX_LENGTH);
 }

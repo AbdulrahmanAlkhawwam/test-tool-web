@@ -24,10 +24,19 @@ export function workBranchName(username: string, slug: string): string {
   return `${workBranchPrefix(username)}${slug}`;
 }
 
-/** The slug of one of the user's work branches (`tests/<username>/<slug>`), or null for any other branch. */
+const SLUG_PATTERN = /^[a-z0-9]+(-[a-z0-9]+)*$/;
+
+/**
+ * The slug of one of the user's work branches (`tests/<username>/<slug>`), or null for any other branch.
+ * The suffix must itself look like a slug produced by `slugify` (lowercase, digits and single dashes, at
+ * most 40 characters) — otherwise it's some other branch that happens to share the `tests/<username>/`
+ * prefix, not one of this tool's work branches.
+ */
 export function slugFromWorkBranch(branch: string, username: string): string | null {
   const prefix = workBranchPrefix(username);
-  return branch.startsWith(prefix) && branch.length > prefix.length ? branch.slice(prefix.length) : null;
+  if (!branch.startsWith(prefix) || branch.length <= prefix.length) return null;
+  const suffix = branch.slice(prefix.length);
+  return suffix.length <= 40 && SLUG_PATTERN.test(suffix) ? suffix : null;
 }
 
 /** The branch the Automation tab opens on: the user's work branch (one with an open MR first), else the default. */

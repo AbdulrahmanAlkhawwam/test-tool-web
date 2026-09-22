@@ -402,6 +402,8 @@ export interface CoverageReport {
   commitId: string;
   files: CoverageFile[];
   notAutomated: NotAutomatedCase[];
+  /** Repository-relative paths of files over 1 MB that the scan skipped, if any. */
+  skippedFiles?: string[];
 }
 
 export type AutomatedScopeMode = 'ALL' | 'PATH' | 'CASES';

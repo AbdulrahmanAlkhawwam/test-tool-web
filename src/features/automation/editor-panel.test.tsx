@@ -83,6 +83,53 @@ describe('EditorPanel', () => {
     expect(onSaved).not.toHaveBeenCalled();
   });
 
+  it('keeps the draft and the conflict banner and toasts an error when Reload itself fails', async () => {
+    let reads = 0;
+    mockRoutes({
+      [FILE_ROUTE]: () => (reads++ === 0 ? fileAt('tests/amina/login-fixes', 'old', 'c1') : apiError(500, 'Boom')),
+      [SAVE_ROUTE]: () => apiError(409, 'This file changed on the branch – reload it before saving'),
+    });
+    const { user } = renderPanel({ branch: 'tests/amina/login-fixes' });
+
+    fireEvent.change(await screen.findByLabelText('Code editor'), { target: { value: 'mine' } });
+    await user.click(screen.getByRole('button', { name: 'Save' }));
+    expect(await screen.findByRole('alert')).toHaveTextContent('This file changed on the branch – reload it before saving');
+    await user.click(screen.getByRole('button', { name: 'Reload' }));
+
+    await waitFor(() => expect(toast.error).toHaveBeenCalledWith('Boom'));
+    expect(screen.getByRole('alert')).toHaveTextContent('This file changed on the branch – reload it before saving');
+    expect(screen.getByLabelText('Code editor')).toHaveValue('mine');
+  });
+
+  it('shows the new-file-exists conflict without a Reload button, keeping the current handling', async () => {
+    mockRoutes({
+      [SAVE_ROUTE]: () => apiError(409, 'A file with this path already exists – open it before saving'),
+    });
+    const { user } = renderPanel({ branch: 'tests/amina/login-fixes', isNew: true });
+
+    fireEvent.change(await screen.findByLabelText('Code editor'), { target: { value: 'mine' } });
+    await user.click(screen.getByRole('button', { name: 'Save' }));
+
+    expect(await screen.findByRole('alert')).toHaveTextContent('A file with this path already exists');
+    expect(screen.queryByRole('button', { name: 'Reload' })).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Copy my changes' })).toBeInTheDocument();
+  });
+
+  it('shows a plain toast (no conflict banner) for a 409 that is not a recoverable conflict', async () => {
+    mockRoutes({
+      [FILE_ROUTE]: fileAt('tests/amina/login-fixes', 'old', 'c1'),
+      [SAVE_ROUTE]: () => apiError(409, 'Project is not linked to a GitLab repository'),
+    });
+    const { user } = renderPanel({ branch: 'tests/amina/login-fixes' });
+
+    fireEvent.change(await screen.findByLabelText('Code editor'), { target: { value: 'mine' } });
+    await user.click(screen.getByRole('button', { name: 'Save' }));
+
+    await waitFor(() => expect(toast.error).toHaveBeenCalledWith('Project is not linked to a GitLab repository'));
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+    expect(screen.getByLabelText('Code editor')).toHaveValue('mine');
+  });
+
   it('opens files over 1 MB read-only', async () => {
     mockRoutes({ [FILE_ROUTE]: fileAt('main', 'big', 'c1', { size: 2_000_000, readOnly: true }) });
     renderPanel();

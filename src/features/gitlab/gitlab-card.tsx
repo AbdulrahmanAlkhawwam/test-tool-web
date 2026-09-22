@@ -58,7 +58,12 @@ export function GitlabCard() {
   async function connect() {
     try {
       const { authorizeUrl } = await start.mutateAsync();
-      goTo(authorizeUrl);
+      const href = safeExternalHref(authorizeUrl);
+      if (!href) {
+        toast.error('Could not start the GitLab connection');
+        return;
+      }
+      goTo(href);
     } catch (e) {
       toast.error(e instanceof ApiError ? e.message : 'Could not start the GitLab connection');
     }

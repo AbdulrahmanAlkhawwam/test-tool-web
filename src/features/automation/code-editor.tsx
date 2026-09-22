@@ -41,7 +41,7 @@ export function CodeEditor({ value, language, readOnly, onChange }: CodeEditorPr
         options={{
           readOnly,
           minimap: { enabled: false },
-          fontFamily: 'var(--font-mono), ui-monospace, monospace',
+          fontFamily: "'IBM Plex Mono', ui-monospace, monospace",
           fontSize: 13,
           tabSize: 2,
           scrollBeyondLastLine: false,

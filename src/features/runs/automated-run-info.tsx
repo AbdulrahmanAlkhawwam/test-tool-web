@@ -4,7 +4,9 @@ import type { TestRun } from '@/lib/types';
 import { cn } from '@/lib/utils';
 import { PipelineStatusBadge } from './pipeline-status-badge';
 
-const URL_PATTERN = /(https?:\/\/[^\s]+)/g;
+// The final char class excludes trailing punctuation (.,;:!?)) so a URL followed by end-of-sentence
+// punctuation, e.g. "…/jobs/55.", links only the URL and leaves the period as plain text.
+const URL_PATTERN = /(https?:\/\/[^\s]*[^\s.,;:!?)])/g;
 
 /**
  * The note with any URL in it (e.g. the job link after "Pipeline finished without a test report")

@@ -62,6 +62,11 @@ function CoveragePanel({ report, projectKey, onOpenFile }: { report: CoverageRep
           ))}
         </ul>
       )}
+      {!!report.skippedFiles?.length && (
+        <p className="mt-3 break-all text-xs text-muted-foreground">
+          Not scanned (over 1 MB): {report.skippedFiles.join(', ')}
+        </p>
+      )}
     </section>
   );
 }

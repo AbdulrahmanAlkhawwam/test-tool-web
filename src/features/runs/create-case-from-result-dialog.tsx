@@ -10,7 +10,7 @@ import { useModules } from '@/features/cases/api';
 import { useCreateCaseFromResult } from '@/features/gitlab/api';
 import { ApiError } from '@/lib/api';
 import type { RunDetail, RunResult } from '@/lib/types';
-import { caseNameFromTitle, guessModuleId } from './module-guess';
+import { CASE_NAME_MAX_LENGTH, caseNameFromTitle, guessModuleId } from './module-guess';
 
 interface CreateCaseFromResultDialogProps {
   run: RunDetail;
@@ -40,13 +40,15 @@ function CreateCaseForm({ run, result, onDone }: { run: RunDetail; result: RunRe
   const list = modules.data ?? [];
   // Pre-filled from the test's file path until the user picks a module.
   const chosenModule = moduleId ?? guessModuleId(result.file, list);
-  const canSubmit = !!name.trim() && !!chosenModule && !create.isPending;
+  const trimmedName = name.trim();
+  const nameError = !trimmedName ? 'Enter a name' : trimmedName.length > CASE_NAME_MAX_LENGTH ? `At most ${CASE_NAME_MAX_LENGTH} characters` : null;
+  const canSubmit = !nameError && !!chosenModule && !create.isPending;
 
   async function submit(e: React.FormEvent) {
     e.preventDefault();
     if (!canSubmit) return;
     try {
-      const created = await create.mutateAsync({ resultId: result.id, input: { name: name.trim(), moduleId: chosenModule } });
+      const created = await create.mutateAsync({ resultId: result.id, input: { name: trimmedName, moduleId: chosenModule } });
       toast.success(`Created ${created.testCase.code}. Add ${created.tag} to the test's title so the next run links it.`);
       onDone();
     } catch (err) {
@@ -64,7 +66,8 @@ function CreateCaseForm({ run, result, onDone }: { run: RunDetail; result: RunRe
         {result.file && <p className="break-all font-mono text-xs text-muted-foreground">{result.file}</p>}
         <div className="space-y-1.5">
           <Label htmlFor="create-case-name">Test case name</Label>
-          <Input id="create-case-name" maxLength={300} value={name} onChange={(e) => setName(e.target.value)} />
+          <Input id="create-case-name" maxLength={CASE_NAME_MAX_LENGTH} value={name} onChange={(e) => setName(e.target.value)} />
+          {name.trim() && nameError && <p className="text-xs text-destructive">{nameError}</p>}
         </div>
         <div className="space-y-1.5">
           <Label htmlFor="create-case-module">Module</Label>

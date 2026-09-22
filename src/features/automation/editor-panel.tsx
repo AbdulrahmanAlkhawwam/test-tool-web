@@ -13,6 +13,8 @@ import { CodeEditor } from './code-editor';
 import { WorkNameDialog } from './work-name-dialog';
 
 const STALE_MESSAGE = 'This file changed on the branch – reload it before saving';
+/** The API's 409 for a New file whose path was created on the branch by someone else in the meantime. */
+const NEW_FILE_EXISTS_MESSAGE = 'A file with this path already exists – open it before saving';
 
 export const NEW_FILE_TEMPLATE = `import { expect, test } from '@playwright/test';
 
@@ -96,9 +98,13 @@ export function EditorPanel({ projectId, branch, path, isNew, username, onSaved,
       );
       onSaved(result);
     } catch (e) {
-      if (e instanceof ApiError && e.status === 409) {
+      // Only the two conflicts the editor knows how to recover from open the conflict banner: a stale
+      // file (offers Reload) or a New file whose path was taken in the meantime (offers Copy, no Reload
+      // since there's nothing on the branch yet to reload). Any other 409 (e.g. "Project is not linked…")
+      // isn't a recoverable editor conflict, so it's just a toast (spec: only a stale-file 409 is a conflict).
+      if (e instanceof ApiError && e.status === 409 && (e.message === STALE_MESSAGE || e.message === NEW_FILE_EXISTS_MESSAGE)) {
         setAskWorkName(false);
-        setConflict(e.message || STALE_MESSAGE);
+        setConflict(e.message);
       } else {
         toast.error(e instanceof ApiError ? e.message : 'Could not save the file');
       }
@@ -112,9 +118,12 @@ export function EditorPanel({ projectId, branch, path, isNew, username, onSaved,
 
   async function reload() {
     const fresh = await file.refetch();
-    if (fresh.data) {
+    if (fresh.isSuccess) {
       setEdit(null);
       setConflict(null);
+    } else if (fresh.isError) {
+      // Keep the draft and the conflict banner so the reload can be retried; the draft is never discarded.
+      toast.error(fresh.error instanceof ApiError ? fresh.error.message : 'Could not reload the file');
     }
   }
 

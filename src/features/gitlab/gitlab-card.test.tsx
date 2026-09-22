@@ -45,6 +45,18 @@ describe('GitlabCard', () => {
     await waitFor(() => expect(goTo).toHaveBeenCalledWith('https://git.ejad.net/oauth/authorize?state=s1'));
   });
 
+  it('refuses to navigate to a non-http(s) authorizeUrl from the API', async () => {
+    mockRoutes({
+      'GET /gitlab/status': { enabled: true, connection: null },
+      'GET /gitlab/oauth/start': { authorizeUrl: 'javascript:alert(1)' },
+    });
+    const user = userEvent.setup();
+    renderWithClient(<GitlabCard />);
+    await user.click(await screen.findByRole('button', { name: 'Connect GitLab' }));
+    await waitFor(() => expect(toast.error).toHaveBeenCalledWith('Could not start the GitLab connection'));
+    expect(goTo).not.toHaveBeenCalled();
+  });
+
   it('never renders an avatar <img> for a non-http(s) URL from the API', async () => {
     mockRoutes({
       'GET /gitlab/status': { enabled: true, connection: { username: 'amina', state: 'ACTIVE', avatarUrl: 'javascript:alert(1)' } },

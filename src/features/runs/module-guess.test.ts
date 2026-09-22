@@ -22,4 +22,14 @@ describe('module guess', () => {
     expect(caseNameFromTitle('  Login   works  ')).toBe('Login works');
     expect(caseNameFromTitle(null)).toBe('');
   });
+
+  it('drops the describe path, keeping only the test itself', () => {
+    expect(caseNameFromTitle('Checkout › pays with card @smoke')).toBe('pays with card');
+    expect(caseNameFromTitle('Auth › Login › works with a valid password')).toBe('works with a valid password');
+  });
+
+  it('caps the name at 300 characters', () => {
+    const long = 'a'.repeat(320);
+    expect(caseNameFromTitle(long)).toBe('a'.repeat(300));
+  });
 });
