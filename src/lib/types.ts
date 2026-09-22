@@ -103,6 +103,12 @@ export interface TestCase {
   createdAt: string;
   updatedAt: string;
   deletedAt: string | null;
+  /**
+   * MCP spec §5–§6. Optional: responses from before the AI phase omit them, and a missing value means
+   * an ordinary approved case written in the web app. Read them through `isDraft`, never by truthiness.
+   */
+  reviewState?: ReviewState;
+  createdVia?: CreatedVia;
   module: ModuleRef;
 }
 
@@ -131,6 +137,9 @@ export interface TestCaseDetail extends TestCase {
   createdBy: UserRef;
   updatedBy: UserRef;
   history: CaseHistoryEntry[];
+  /** Set once a tester approved an AI draft (spec §6); null or absent on cases nobody had to approve. */
+  approvedBy?: UserRef | null;
+  approvedAt?: string | null;
 }
 
 export interface TestRun {
@@ -439,4 +448,80 @@ export interface CreateCaseFromResultResponse {
 export interface CiSnippetResponse {
   playwrightConfigPath: string;
   yaml: string;
+}
+
+// ---- AI test authoring (MCP spec §4–§9) ----
+
+export type ReviewState = 'APPROVED' | 'AI_DRAFT';
+export type CreatedVia = 'WEB' | 'IMPORT' | 'AI';
+export type ApiTokenPurpose = 'MCP';
+
+/** Personal access token expiry choices (spec §4). 90 is the default. */
+export type TokenExpiryDays = 30 | 90 | 180;
+
+/** GET /users/me/tokens. The token value itself is never in this shape — only its visible prefix. */
+export interface ApiToken {
+  id: string;
+  name: string;
+  /** Phase 2 of the API adds RUNNER; absent on older responses. */
+  purpose?: ApiTokenPurpose;
+  /** The 8 visible characters the API stores next to the hash (spec §4). */
+  prefix: string;
+  createdAt: string;
+  expiresAt: string;
+  lastUsedAt: string | null;
+  revokedAt: string | null;
+}
+
+/** POST /users/me/tokens body. */
+export interface CreateTokenInput {
+  name: string;
+  expiresInDays: TokenExpiryDays;
+}
+
+/**
+ * POST /users/me/tokens response: the same meta the list returns plus the full `ejad_pat_…` value,
+ * which the API sends exactly once. It must never be cached, stored, logged or put in a URL (spec §4).
+ */
+export interface CreatedToken extends ApiToken {
+  token: string;
+}
+
+/** Template fields an AI suggestion may change (spec §5: template fields only). */
+export type SuggestionField =
+  | 'name'
+  | 'description'
+  | 'preconditions'
+  | 'steps'
+  | 'testData'
+  | 'expectedResult'
+  | 'priority'
+  | 'notes';
+
+/** `from` is the value when the AI read the case, `to` is what it proposes. */
+export interface SuggestionChange {
+  from: string | null;
+  to: string | null;
+}
+
+export type SuggestionStatus = 'PENDING' | 'ACCEPTED' | 'REJECTED';
+
+/** GET /test-cases/:id/suggestion — the one pending suggestion, or null (spec §6, §9). */
+export interface TestCaseSuggestion {
+  id: string;
+  testCaseId: string;
+  changes: Partial<Record<SuggestionField, SuggestionChange>>;
+  status: SuggestionStatus;
+  rationale: string | null;
+  createdBy: UserRef;
+  createdAt: string;
+}
+
+/**
+ * POST /test-cases/approve response. Both fields are optional: the API may report only the failures,
+ * only the approved ids, or neither (everything approved). `summarizeApproval` normalizes it.
+ */
+export interface BulkApproveResult {
+  approved?: string[];
+  failed?: { id: string; message: string }[];
 }

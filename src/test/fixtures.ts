@@ -1,4 +1,5 @@
 import type {
+  ApiToken,
   AutomationBranch,
   AutomationBranches,
   AutomationFile,
@@ -53,5 +54,18 @@ export const fileAt = (ref: string, content: string, lastCommitId: string, extra
   lastCommitId,
   size: content.length,
   readOnly: false,
+  ...extra,
+});
+
+/** GET /users/me/tokens row. Active by default; pass `revokedAt` or a past `expiresAt` for the other states. */
+export const apiToken = (extra: Partial<ApiToken> = {}): ApiToken => ({
+  id: 't1',
+  name: 'Amina laptop',
+  purpose: 'MCP',
+  prefix: 'a1b2c3d4',
+  createdAt: '2026-09-01T09:00:00.000Z',
+  expiresAt: '2026-12-21T09:00:00.000Z',
+  lastUsedAt: null,
+  revokedAt: null,
   ...extra,
 });
