@@ -3,6 +3,7 @@
 import { useState } from 'react';
 import { NewTokenDialog } from './new-token-dialog';
 import { SetupSnippets } from './setup-snippets';
+import { TokenList } from './token-list';
 import { TokenReveal } from './token-reveal';
 
 /**
@@ -29,6 +30,8 @@ export function AiAccessCard() {
       </div>
 
       {created && <TokenReveal name={created.name} token={created.token} onDismiss={() => setCreated(null)} />}
+
+      <TokenList />
 
       <SetupSnippets token={created?.token ?? null} />
     </section>

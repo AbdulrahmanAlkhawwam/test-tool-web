@@ -1,7 +1,7 @@
 import { screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { mockRoutes } from '@/test/fetch-routes';
+import { apiError, json, mockRoutes } from '@/test/fetch-routes';
 import { apiToken } from '@/test/fixtures';
 import { renderWithClient } from '@/test/render';
 import { AiAccessCard } from './ai-access-card';
@@ -45,6 +45,42 @@ describe('AiAccessCard', () => {
     expect(await screen.findByRole('button', { name: 'Copied' })).toBeInTheDocument();
     expect(await navigator.clipboard.readText()).toBe(TOKEN);
     expect(callsTo('POST', '/users/me/tokens')[0].body).toEqual({ name: 'Amina laptop', expiresInDays: 90 });
+  });
+
+  it('shows the API’s message when creating a token fails', async () => {
+    const { toast } = await import('sonner');
+    routes({ 'POST /users/me/tokens': () => apiError(422, 'A token named "Amina laptop" already exists') });
+    const user = userEvent.setup();
+    renderWithClient(<AiAccessCard />);
+
+    await createToken(user);
+
+    await waitFor(() =>
+      expect(toast.error).toHaveBeenCalledWith('A token named "Amina laptop" already exists'),
+    );
+    expect(screen.queryByText(TOKEN)).not.toBeInTheDocument();
+  });
+
+  it('disables the name input and the expiry select while the create mutation is pending', async () => {
+    let resolveCreate!: (value: unknown) => void;
+    routes({
+      'POST /users/me/tokens': () =>
+        new Promise((resolve) => {
+          resolveCreate = resolve;
+        }),
+    });
+    const user = userEvent.setup();
+    renderWithClient(<AiAccessCard />);
+
+    await user.click(await screen.findByRole('button', { name: 'New token' }));
+    await user.type(await screen.findByLabelText('Token name'), 'Amina laptop');
+    await user.click(screen.getByRole('button', { name: 'Create token' }));
+
+    await waitFor(() => expect(screen.getByLabelText('Token name')).toBeDisabled());
+    expect(screen.getByLabelText('Expires after')).toBeDisabled();
+
+    resolveCreate(json(200, { ...apiToken(), token: TOKEN }));
+    expect(await screen.findByText(TOKEN)).toBeInTheDocument();
   });
 
   it('defaults the expiry to 90 days and sends the chosen one', async () => {

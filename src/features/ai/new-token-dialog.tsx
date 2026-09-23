@@ -76,11 +76,22 @@ export function NewTokenDialog({ onCreated }: { onCreated: (created: { name: str
         <form id="new-token" onSubmit={submit} className="space-y-4">
           <div className="space-y-1.5">
             <Label htmlFor="token-name">Token name</Label>
-            <Input id="token-name" placeholder="Amina laptop" value={name} onChange={(e) => setName(e.target.value)} />
+            <Input
+              id="token-name"
+              maxLength={60}
+              placeholder="Amina laptop"
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              disabled={create.isPending}
+            />
           </div>
           <div className="space-y-1.5">
             <Label htmlFor="token-expiry">Expires after</Label>
-            <Select value={String(expiresInDays)} onValueChange={(v) => setExpiresInDays(Number(v) as TokenExpiryDays)}>
+            <Select
+              value={String(expiresInDays)}
+              onValueChange={(v) => setExpiresInDays(Number(v) as TokenExpiryDays)}
+              disabled={create.isPending}
+            >
               <SelectTrigger id="token-expiry">
                 <SelectValue />
               </SelectTrigger>
