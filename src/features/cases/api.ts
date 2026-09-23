@@ -69,7 +69,8 @@ export function useDraftCount(projectId: string) {
     queryKey: caseKeys.draftCount(projectId),
     queryFn: () =>
       api<Paged<TestCaseListItem>>(`/projects/${projectId}/test-cases`, { query: { reviewState: 'AI_DRAFT', page: 1, pageSize: 1 } }),
-    select: (data) => data.total,
+    // A `total` the API forgot to send must render as 0, never as NaN or "undefined" in the chip.
+    select: (data) => data.total ?? 0,
     enabled: !!projectId,
   });
 }

@@ -1,10 +1,11 @@
 'use client';
 
-import { Search } from 'lucide-react';
+import { Bot, Search } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { PRIORITY_LABELS, PRIORITY_ORDER, STATUS_LABELS, STATUS_ORDER } from '@/lib/labels';
+import { cn } from '@/lib/utils';
 import type { ModuleRef, Priority, ResultStatus } from '@/lib/types';
 import type { CaseFilters as Filters } from './api';
 
@@ -14,9 +15,11 @@ interface CaseFiltersProps {
   modules: ModuleRef[];
   value: Filters;
   onChange: (next: Filters) => void;
+  /** Number of AI drafts in the project; absent while it is still loading. */
+  draftCount?: number;
 }
 
-export function CaseFilters({ modules, value, onChange }: CaseFiltersProps) {
+export function CaseFilters({ modules, value, onChange, draftCount }: CaseFiltersProps) {
   const [q, setQ] = useState(value.q ?? '');
 
   useEffect(() => {
@@ -73,6 +76,18 @@ export function CaseFilters({ modules, value, onChange }: CaseFiltersProps) {
           ))}
         </SelectContent>
       </Select>
+      <button
+        type="button"
+        aria-pressed={value.reviewState === 'AI_DRAFT'}
+        onClick={() => set({ reviewState: value.reviewState === 'AI_DRAFT' ? undefined : 'AI_DRAFT' })}
+        className={cn(
+          'inline-flex h-10 items-center gap-1.5 rounded-full border px-3 text-sm transition-colors',
+          value.reviewState === 'AI_DRAFT' ? 'border-primary bg-primary/10 font-medium text-primary' : 'hover:bg-muted',
+        )}
+      >
+        <Bot className="h-4 w-4" aria-hidden />
+        AI drafts{draftCount === undefined ? '' : ` (${draftCount})`}
+      </button>
     </div>
   );
 }

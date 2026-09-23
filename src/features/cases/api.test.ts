@@ -26,6 +26,13 @@ describe('review hooks', () => {
     expect(callsTo('GET', '/projects/p1/test-cases')[0].query).toEqual({ reviewState: 'AI_DRAFT', page: '1', pageSize: '1' });
   });
 
+  it('reads as 0, never NaN or undefined, when the API response omits `total`', async () => {
+    mockRoutes({ 'GET /projects/p1/test-cases': () => json(200, { items: [], page: 1, pageSize: 1 }) });
+    const { result } = renderHook(() => useDraftCount('p1'), { wrapper: createWrapper().wrapper });
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+    expect(result.current.data).toBe(0);
+  });
+
   it('passes the reviewState filter through to the list', async () => {
     const { callsTo } = mockRoutes({ 'GET /projects/p1/test-cases': pagedCases([caseItem('c1', 'TC-AUTH-001', { reviewState: 'AI_DRAFT' })]) });
     const { result } = renderHook(() => useCases('p1', { reviewState: 'AI_DRAFT', page: 1, pageSize: 50 }), {
@@ -66,6 +73,20 @@ describe('review hooks', () => {
       await expect(result.current.mutateAsync(['c1', 'c2'])).resolves.toEqual(body);
     });
     expect(callsTo('POST', '/test-cases/approve')[0].body).toEqual({ ids: ['c1', 'c2'] });
+  });
+
+  it('refreshes after a stale bulk approve too, the same as a single approve', async () => {
+    mockRoutes({ 'POST /test-cases/approve': () => apiError(409, 'One or more test cases changed since you selected them') });
+    const { queryClient, wrapper } = createWrapper();
+    const invalidate = vi.spyOn(queryClient, 'invalidateQueries');
+    const { result } = renderHook(() => useApproveCases('p1'), { wrapper });
+    await act(async () => {
+      await expect(result.current.mutateAsync(['c1', 'c2'])).rejects.toMatchObject({
+        status: 409,
+        message: 'One or more test cases changed since you selected them',
+      });
+    });
+    expect(invalidate).toHaveBeenCalledWith({ queryKey: caseKeys.all('p1') });
   });
 
   it('reads the pending suggestion, tolerates no-suggestion answers, and reports a stale accept', async () => {

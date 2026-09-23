@@ -32,6 +32,14 @@ describe('summarizeApproval', () => {
     // A failure the API also lists as approved must not be counted twice.
     expect(summarizeApproval(['c1', 'c2'], { approved: ['c1', 'c2'], failed })).toEqual({ approved: 1, failed });
   });
+
+  it('reports zero approved when every id in the batch failed', () => {
+    const failed = [
+      { id: 'c1', message: 'TC-AUTH-001 could not be approved' },
+      { id: 'c2', message: 'TC-AUTH-002 could not be approved' },
+    ];
+    expect(summarizeApproval(['c1', 'c2'], { failed })).toEqual({ approved: 0, failed });
+  });
 });
 
 describe('approvalMessage', () => {
