@@ -109,4 +109,24 @@ describe('CaseDetailPage — AI drafts and suggestions', () => {
     expect(await screen.findByText('1. Open the new Login screen')).toBeInTheDocument();
     expect(screen.getByLabelText('Test case name')).toHaveValue('My unsaved title');
   });
+
+  it('keeps the draft banner status region announcement-only, with no buttons inside it', async () => {
+    mockRoutes({
+      ...base,
+      'GET /test-cases/c1': caseDetail({ reviewState: 'AI_DRAFT', createdVia: 'AI' }),
+    });
+    render();
+
+    // The page briefly renders its own role="status" loading indicator before the case loads: wait for
+    // the banner text first, then find the status region that actually announces it.
+    await screen.findByText(/This is an AI draft/);
+    const status = screen.getByText(/This is an AI draft/).closest('[role="status"]') as HTMLElement;
+    expect(status).not.toBeNull();
+    // The live region must wrap only the announced text, not Approve/Reject — otherwise a screen reader
+    // re-announcing the region on every change also re-announces the interactive controls (Task 6 review
+    // carry-over). This must fail if role="status" moves back onto the banner's outer wrapper.
+    expect(within(status).queryAllByRole('button')).toHaveLength(0);
+    expect(screen.getByRole('button', { name: 'Approve' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Reject' })).toBeInTheDocument();
+  });
 });

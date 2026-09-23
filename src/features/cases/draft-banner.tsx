@@ -27,6 +27,9 @@ export function DraftBanner({
   const approve = useApproveCase(projectId);
   const del = useDeleteCase(projectId);
   const [rejectOpen, setRejectOpen] = useState(false);
+  // Lock Approve and Reject against each other while either mutation is in flight, the same way
+  // SuggestionPanel's `busy` does — otherwise a tester could fire both at once (Task 6 review carry-over).
+  const busy = approve.isPending || del.isPending;
 
   async function onApprove() {
     try {
@@ -56,11 +59,17 @@ export function DraftBanner({
           This is an AI draft. It stays out of runs, reports, dashboard counts and exports until someone approves it.
         </span>
         <div className="flex gap-2">
-          <Button size="sm" disabled={approve.isPending} onClick={() => void onApprove()}>
+          <Button size="sm" disabled={busy} onClick={() => void onApprove()}>
             <Check className="mr-1.5 h-4 w-4" aria-hidden />
             Approve
           </Button>
-          <Button size="sm" variant="outline" className="text-destructive hover:text-destructive" onClick={() => setRejectOpen(true)}>
+          <Button
+            size="sm"
+            variant="outline"
+            className="text-destructive hover:text-destructive"
+            disabled={busy}
+            onClick={() => setRejectOpen(true)}
+          >
             <X className="mr-1.5 h-4 w-4" aria-hidden />
             Reject
           </Button>
