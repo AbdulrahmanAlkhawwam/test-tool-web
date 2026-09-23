@@ -100,11 +100,17 @@ export function SuggestionPanel({ caseId, projectId }: { caseId: string; project
             <div key={field} className="space-y-1.5">
               <dt className="text-sm font-medium">{FIELD_LABELS[field]}</dt>
               <dd className="grid gap-2 sm:grid-cols-[1fr_auto_1fr] sm:items-start">
+                {/* Strikethrough alone doesn't reach a screen reader: label each side so "old vs. new" is
+                    audible, not just visible. */}
                 <span className="whitespace-pre-wrap rounded-md bg-card p-3 text-sm text-muted-foreground line-through decoration-muted-foreground/50">
+                  <span className="sr-only">Current: </span>
                   {displayValue(field, change.from)}
                 </span>
                 <ArrowRight className="mt-3 hidden h-4 w-4 text-muted-foreground sm:block" aria-hidden />
-                <span className="whitespace-pre-wrap rounded-md bg-card p-3 text-sm">{displayValue(field, change.to)}</span>
+                <span className="whitespace-pre-wrap rounded-md bg-card p-3 text-sm">
+                  <span className="sr-only">Suggested: </span>
+                  {displayValue(field, change.to)}
+                </span>
               </dd>
             </div>
           );

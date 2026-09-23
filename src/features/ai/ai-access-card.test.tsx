@@ -1,4 +1,4 @@
-import { screen, waitFor } from '@testing-library/react';
+import { screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { apiError, json, mockRoutes } from '@/test/fetch-routes';
@@ -100,6 +100,9 @@ describe('AiAccessCard', () => {
     routes();
     const log = vi.spyOn(console, 'log').mockImplementation(() => undefined);
     const info = vi.spyOn(console, 'info').mockImplementation(() => undefined);
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
+    const error = vi.spyOn(console, 'error').mockImplementation(() => undefined);
+    const debug = vi.spyOn(console, 'debug').mockImplementation(() => undefined);
     const user = userEvent.setup();
     const { queryClient } = renderWithClient(<AiAccessCard />);
 
@@ -115,11 +118,14 @@ describe('AiAccessCard', () => {
       queryClient.getMutationCache().getAll().map((m) => m.state.data),
     ]);
     expect(caches).not.toContain(TOKEN);
-    for (const spy of [log, info]) {
+    for (const spy of [log, info, warn, error, debug]) {
       expect(spy.mock.calls.flat().join(' ')).not.toContain(TOKEN);
     }
     log.mockRestore();
     info.mockRestore();
+    warn.mockRestore();
+    error.mockRestore();
+    debug.mockRestore();
   });
 
   it('tells the tester to copy by hand when the clipboard refuses, and keeps the token on screen', async () => {
@@ -151,6 +157,23 @@ describe('AiAccessCard', () => {
     // The snippets fall back to the placeholder rather than replaying the token.
     // Three snippets carry it (command + two JSON blocks), so this is getAllByText.
     expect(screen.getAllByText(/Bearer YOUR_TOKEN/)).toHaveLength(3);
+  });
+
+  it('keeps the token-reveal status region announcement-only, with no buttons inside it', async () => {
+    routes();
+    const user = userEvent.setup();
+    renderWithClient(<AiAccessCard />);
+
+    await createToken(user);
+    expect(await screen.findByText(TOKEN)).toBeInTheDocument();
+
+    const status = await screen.findByRole('status');
+    expect(status).toHaveTextContent(`${'Amina laptop'} is ready`);
+    // The live region must wrap only the announced text. A screen reader re-announcing this region on
+    // every render must not also re-announce interactive controls like Copy token/Done.
+    expect(within(status).queryAllByRole('button')).toHaveLength(0);
+    expect(screen.getByRole('button', { name: 'Copy token' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Done' })).toBeInTheDocument();
   });
 
   it('builds the setup snippets from the real API URL', async () => {

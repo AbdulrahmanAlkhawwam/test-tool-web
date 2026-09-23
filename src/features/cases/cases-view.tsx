@@ -15,7 +15,14 @@ import { CaseTable } from './case-table';
 import { ModulesDialog } from './modules-dialog';
 import { approvalMessage, isDraft, pruneSelection, summarizeApproval } from './review';
 
-const PAGE_SIZE = 50;
+/**
+ * Spec §9: POST /test-cases/approve accepts at most 50 ids. PAGE_SIZE must never exceed this — "Select all
+ * AI drafts on this page" can select every draft shown, and that selection is sent to bulk-approve as-is
+ * with no further slicing. Keeping the two tied to one constant (rather than two numbers that happen to
+ * match) means a future change to either one won't quietly break bulk approve.
+ */
+const BULK_APPROVE_CAP = 50;
+const PAGE_SIZE = BULK_APPROVE_CAP;
 
 const toggleId = (list: string[], id: string) => (list.includes(id) ? list.filter((v) => v !== id) : [...list, id]);
 
@@ -179,7 +186,7 @@ export function CasesView({ project, actions }: { project: ProjectDetail; action
             onDelete={setDeleting}
             onApprove={(tc) => void approveOne(tc)}
             onReject={setRejecting}
-            approving={approve.isPending}
+            approvingId={approve.isPending ? approve.variables : undefined}
           />
           <div className="flex items-center justify-between text-sm text-muted-foreground">
             <span>

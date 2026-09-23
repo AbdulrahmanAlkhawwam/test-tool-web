@@ -59,6 +59,29 @@ describe('CasesView — AI drafts', () => {
     expect(callsTo('GET', '/projects/p1/test-cases').some((c) => c.query.reviewState === 'AI_DRAFT' && c.query.pageSize === '50')).toBe(true);
   });
 
+  it('turns the AI drafts chip off when a status filter is chosen, so they never fight over reviewState', async () => {
+    // The API forces reviewState=APPROVED whenever a status filter is set (a draft has no result to filter
+    // on), so leaving the chip on with a status filter would show "AI drafts (2)" over an empty list.
+    const { callsTo } = mockRoutes({
+      ...modulesRoute,
+      'GET /projects/p1/test-cases': casesRoute({ '1': pagedCases([draft, approved]) }, 2),
+    });
+    const user = userEvent.setup();
+    renderWithClient(<CasesView project={caseProject} />);
+
+    const chip = await screen.findByRole('button', { name: 'AI drafts (2)' });
+    await user.click(chip);
+    expect(chip).toHaveAttribute('aria-pressed', 'true');
+
+    await user.click(screen.getByRole('combobox', { name: 'Filter by latest status' }));
+    await user.click(await screen.findByRole('option', { name: 'Passed' }));
+
+    await waitFor(() => expect(chip).toHaveAttribute('aria-pressed', 'false'));
+    const withStatus = callsTo('GET', '/projects/p1/test-cases').filter((c) => c.query.status === 'PASSED');
+    expect(withStatus.length).toBeGreaterThan(0);
+    expect(withStatus.every((c) => c.query.reviewState === undefined)).toBe(true);
+  });
+
   it('approves one draft and says so', async () => {
     const { toast } = await import('sonner');
     mockRoutes({
@@ -72,6 +95,29 @@ describe('CasesView — AI drafts', () => {
     await user.click(await screen.findByRole('button', { name: 'Approve TC-AUTH-001' }));
 
     await waitFor(() => expect(toast.success).toHaveBeenCalledWith('TC-AUTH-001 approved'));
+  });
+
+  it('locks only the row being approved, leaving other drafts’ Approve and Reject buttons usable', async () => {
+    let resolveApprove!: () => void;
+    mockRoutes({
+      ...modulesRoute,
+      'GET /projects/p1/test-cases': casesRoute({ '1': pagedCases([draft, draft2, approved]) }, 2),
+      'POST /test-cases/c1/approve': () =>
+        new Promise((resolve) => {
+          resolveApprove = () => resolve(new Response(JSON.stringify(caseItem('c1', 'TC-AUTH-001')), { status: 200 }));
+        }),
+    });
+    const user = userEvent.setup();
+    renderWithClient(<CasesView project={caseProject} />);
+
+    await user.click(await screen.findByRole('button', { name: 'Approve TC-AUTH-001' }));
+
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Approve TC-AUTH-001' })).toBeDisabled());
+    expect(screen.getByRole('button', { name: 'Approve TC-AUTH-002' })).toBeEnabled();
+    expect(screen.getByRole('button', { name: 'Reject TC-AUTH-001' })).toBeEnabled();
+
+    resolveApprove();
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Approve TC-AUTH-001' })).toBeEnabled());
   });
 
   it('shows the API’s message when a draft was already approved elsewhere, and refreshes the list', async () => {

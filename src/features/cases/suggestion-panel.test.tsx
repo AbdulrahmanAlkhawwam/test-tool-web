@@ -35,8 +35,10 @@ describe('SuggestionPanel', () => {
     expect(screen.getByText('Test steps')).toBeInTheDocument();
     expect(screen.getByText('1. Open Login')).toBeInTheDocument();
     // getByText normalizes whitespace, so match the new line with a regex and check the raw text.
+    // getNodeText (what getByText matches against) only looks at the span's own text node, ignoring the
+    // sr-only "Suggested: " label element inside it — but the real textContent includes that label too.
     const next = screen.getByText(/2\. Tap Forgot password/);
-    expect(next.textContent).toBe('1. Open Login\n2. Tap Forgot password');
+    expect(next.textContent).toBe('Suggested: 1. Open Login\n2. Tap Forgot password');
     expect(next).toHaveClass('whitespace-pre-wrap');
     // Priority reads as a label, not as an enum value.
     expect(screen.getByText('Medium')).toBeInTheDocument();
@@ -83,6 +85,15 @@ describe('SuggestionPanel', () => {
     renderWithClient(<SuggestionPanel caseId="c1" projectId="p1" />);
 
     expect(await screen.findByRole('heading', { name: 'Suggested changes by AI' })).toBeInTheDocument();
+  });
+
+  it('labels the old and new values for screen readers, not just with strikethrough', async () => {
+    mockRoutes({ 'GET /test-cases/c1/suggestion': suggestion() });
+    renderWithClient(<SuggestionPanel caseId="c1" projectId="p1" />);
+
+    await screen.findByRole('heading', { name: 'Suggested changes by AI' });
+    expect(screen.getByText('Current:')).toHaveClass('sr-only');
+    expect(screen.getByText('Suggested:')).toHaveClass('sr-only');
   });
 
   it('shows nothing when there is no pending suggestion, and disappears after Reject', async () => {

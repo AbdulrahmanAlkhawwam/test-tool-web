@@ -63,7 +63,14 @@ export function CaseFilters({ modules, value, onChange, draftCount }: CaseFilter
           ))}
         </SelectContent>
       </Select>
-      <Select value={value.status ?? ALL} onValueChange={(v) => set({ status: v === ALL ? undefined : (v as ResultStatus) })}>
+      <Select
+        value={value.status ?? ALL}
+        onValueChange={(v) =>
+          // The API forces reviewState=APPROVED whenever a status filter is set (drafts have no result to
+          // filter on), which would otherwise leave the "AI drafts (N)" chip on but showing an empty list.
+          set({ status: v === ALL ? undefined : (v as ResultStatus), reviewState: v === ALL ? value.reviewState : undefined })
+        }
+      >
         <SelectTrigger className="w-44" aria-label="Filter by latest status">
           <SelectValue />
         </SelectTrigger>

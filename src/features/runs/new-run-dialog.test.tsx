@@ -12,13 +12,6 @@ vi.mock('next/navigation', () => ({ useRouter: () => ({ push: vi.fn() }) }));
 const json = (status: number, body: unknown) =>
   new Response(JSON.stringify(body), { status, headers: { 'Content-Type': 'application/json' } });
 
-// jsdom has no ResizeObserver; Radix's Checkbox (mounted once "By priority" is selected) needs one.
-class ResizeObserverStub {
-  observe() {}
-  unobserve() {}
-  disconnect() {}
-}
-
 const project: ProjectDetail = {
   id: 'p1',
   name: 'Ninja',
@@ -44,7 +37,6 @@ describe('NewRunDialog', () => {
   beforeEach(() => {
     fetchMock.mockResolvedValue(json(200, []));
     vi.stubGlobal('fetch', fetchMock);
-    vi.stubGlobal('ResizeObserver', ResizeObserverStub);
   });
   afterEach(() => {
     fetchMock.mockReset();

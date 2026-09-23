@@ -23,7 +23,8 @@ interface CaseTableProps {
   onDelete: (testCase: TestCaseListItem) => void;
   onApprove: (testCase: TestCaseListItem) => void;
   onReject: (testCase: TestCaseListItem) => void;
-  approving?: boolean;
+  /** The id of the draft currently being approved, if any — only that row's Approve button locks. */
+  approvingId?: string;
 }
 
 export function CaseTable({
@@ -36,7 +37,7 @@ export function CaseTable({
   onDelete,
   onApprove,
   onReject,
-  approving,
+  approvingId,
 }: CaseTableProps) {
   const draftIds = items.filter(isDraft).map((tc) => tc.id);
   const selectedDraftCount = draftIds.filter((id) => selected.includes(id)).length;
@@ -99,7 +100,12 @@ export function CaseTable({
                   <div className="flex items-center justify-end gap-1">
                     {draft && (
                       <>
-                        <Button size="sm" aria-label={`Approve ${tc.code}`} disabled={approving} onClick={() => onApprove(tc)}>
+                        <Button
+                          size="sm"
+                          aria-label={`Approve ${tc.code}`}
+                          disabled={approvingId === tc.id}
+                          onClick={() => onApprove(tc)}
+                        >
                           <Check className="mr-1 h-4 w-4" aria-hidden />
                           Approve
                         </Button>

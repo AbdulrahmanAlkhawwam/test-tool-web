@@ -11,7 +11,7 @@ import { Button } from '@/components/ui/button';
  * (an insecure context, a browser that refuses without a gesture) the text stays on screen and the
  * tester is told to copy it by hand.
  */
-export function CopyButton({ text, label, className }: { text: string; label: string; className?: string }) {
+export function CopyButton({ text, label }: { text: string; label: string }) {
   const [copied, setCopied] = useState(false);
 
   useEffect(() => {
@@ -30,7 +30,7 @@ export function CopyButton({ text, label, className }: { text: string; label: st
   }
 
   return (
-    <Button type="button" variant="outline" size="sm" className={className} onClick={() => void copy()}>
+    <Button type="button" variant="outline" size="sm" onClick={() => void copy()}>
       {copied ? <Check className="mr-1.5 h-4 w-4" aria-hidden /> : <Copy className="mr-1.5 h-4 w-4" aria-hidden />}
       {copied ? 'Copied' : label}
     </Button>

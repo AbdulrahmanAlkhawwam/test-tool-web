@@ -1,6 +1,6 @@
 import { screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { formatDateTime } from '@/lib/format';
 import { apiError, mockRoutes } from '@/test/fetch-routes';
 import { apiToken } from '@/test/fixtures';
@@ -10,7 +10,14 @@ import { TokenList } from './token-list';
 vi.mock('sonner', () => ({ toast: { success: vi.fn(), error: vi.fn() } }));
 
 describe('TokenList', () => {
+  // The component reads the real clock (it has no `now` prop, unlike the pure helpers in tokens.ts), and
+  // several fixtures below default to `apiToken()`'s expiresAt of 2026-12-21. Pin the clock well before
+  // that so this test doesn't start failing once that date passes.
+  beforeEach(() => {
+    vi.setSystemTime(new Date('2026-09-22T12:00:00.000Z'));
+  });
   afterEach(() => {
+    vi.useRealTimers();
     vi.unstubAllGlobals();
     vi.clearAllMocks();
   });
