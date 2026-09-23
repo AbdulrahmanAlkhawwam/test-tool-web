@@ -6,8 +6,12 @@ import type {
   AutomationTree,
   AutomationTreeEntry,
   MergeRequestRef,
+  Paged,
   ProjectDetail,
   RepositoryLink,
+  TestCaseDetail,
+  TestCaseListItem,
+  TestCaseSuggestion,
 } from '@/lib/types';
 
 export const mergeRequest: MergeRequestRef = {
@@ -67,5 +71,71 @@ export const apiToken = (extra: Partial<ApiToken> = {}): ApiToken => ({
   expiresAt: '2026-12-21T09:00:00.000Z',
   lastUsedAt: null,
   revokedAt: null,
+  ...extra,
+});
+
+/** A project with one module, for the Test Cases tab and the case detail page. */
+export const caseProject: ProjectDetail = {
+  id: 'p1',
+  name: 'Ninja Store',
+  key: 'NINJA',
+  description: null,
+  archivedAt: null,
+  createdAt: '2026-01-01T00:00:00.000Z',
+  modules: [{ id: 'm1', name: 'Authentication', code: 'AUTH', caseCount: 3 }],
+};
+
+/** A row of GET /projects/:id/test-cases. Approved by default; pass `reviewState: 'AI_DRAFT'` for a draft. */
+export const caseItem = (id: string, code: string, extra: Partial<TestCaseListItem> = {}): TestCaseListItem => ({
+  id,
+  projectId: 'p1',
+  moduleId: 'm1',
+  code,
+  name: `Case ${code}`,
+  description: null,
+  preconditions: null,
+  steps: null,
+  testData: null,
+  expectedResult: null,
+  priority: 'MEDIUM',
+  notes: null,
+  createdAt: '2026-09-01T00:00:00.000Z',
+  updatedAt: '2026-09-01T00:00:00.000Z',
+  deletedAt: null,
+  module: { id: 'm1', name: 'Authentication', code: 'AUTH' },
+  reviewState: 'APPROVED',
+  createdVia: 'WEB',
+  latestResult: null,
+  ...extra,
+});
+
+export const pagedCases = (
+  items: TestCaseListItem[],
+  extra: { total?: number; page?: number; pageSize?: number } = {},
+): Paged<TestCaseListItem> => ({
+  items,
+  total: extra.total ?? items.length,
+  page: extra.page ?? 1,
+  pageSize: extra.pageSize ?? 50,
+});
+
+/** GET /test-cases/:id body. */
+export const caseDetail = (extra: Partial<TestCaseDetail> = {}): TestCaseDetail => ({
+  ...caseItem('c1', 'TC-AUTH-001'),
+  createdBy: { id: 'u1', name: 'Amina' },
+  updatedBy: { id: 'u1', name: 'Amina' },
+  history: [],
+  ...extra,
+});
+
+/** GET /test-cases/:id/suggestion body. */
+export const suggestion = (extra: Partial<TestCaseSuggestion> = {}): TestCaseSuggestion => ({
+  id: 's1',
+  testCaseId: 'c1',
+  changes: { steps: { from: '1. Open Login', to: '1. Open Login\n2. Tap Forgot password' } },
+  status: 'PENDING',
+  rationale: 'The Login screen now has a Forgot password link.',
+  createdBy: { id: 'u9', name: 'Amina' },
+  createdAt: '2026-09-20T08:00:00.000Z',
   ...extra,
 });

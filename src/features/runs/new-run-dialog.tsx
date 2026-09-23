@@ -10,6 +10,7 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { useCases, useModules } from '@/features/cases/api';
+import { isDraft } from '@/features/cases/review';
 import { ApiError } from '@/lib/api';
 import { PRIORITY_LABELS, PRIORITY_ORDER } from '@/lib/labels';
 import type { ProjectDetail, SelectionMode } from '@/lib/types';
@@ -28,12 +29,15 @@ const toggle = <T,>(list: T[], value: T) => (list.includes(value) ? list.filter(
 /** Mounted only in "Pick test cases" mode, so the case list is fetched only when needed. */
 export function CasePicker({ projectId, selected, onToggle }: { projectId: string; selected: string[]; onToggle: (id: string) => void }) {
   const [search, setSearch] = useState('');
-  const cases = useCases(projectId, { q: search || undefined, page: 1, pageSize: 200 });
+  // Runs never contain AI drafts (MCP spec §6). Ask for approved cases and filter anything else out,
+  // so a draft cannot slip into a run even if the API forgets the filter.
+  const cases = useCases(projectId, { q: search || undefined, reviewState: 'APPROVED', page: 1, pageSize: 200 });
+  const items = (cases.data?.items ?? []).filter((tc) => !isDraft(tc));
   return (
     <div className="space-y-2 rounded-md border p-3">
       <Input type="search" placeholder="Search test cases" aria-label="Search test cases to pick" value={search} onChange={(e) => setSearch(e.target.value)} />
       <div className="max-h-56 space-y-1.5 overflow-y-auto">
-        {(cases.data?.items ?? []).map((tc) => (
+        {items.map((tc) => (
           <div key={tc.id} className="flex items-center gap-2">
             <Checkbox id={`case-${tc.id}`} checked={selected.includes(tc.id)} onCheckedChange={() => onToggle(tc.id)} />
             <Label htmlFor={`case-${tc.id}`} className="font-normal">

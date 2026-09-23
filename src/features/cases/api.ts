@@ -1,7 +1,8 @@
 import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { projectKeys } from '@/features/projects/api';
-import { api } from '@/lib/api';
+import { api, ApiError } from '@/lib/api';
 import type {
+  BulkApproveResult,
   ImportPreview,
   ImportResult,
   ModuleRef,
@@ -9,9 +10,11 @@ import type {
   Paged,
   Priority,
   ResultStatus,
+  ReviewState,
   TestCase,
   TestCaseDetail,
   TestCaseListItem,
+  TestCaseSuggestion,
 } from '@/lib/types';
 import type { CaseInput } from './case-schema';
 
@@ -19,6 +22,8 @@ export interface CaseFilters {
   moduleId?: string;
   priority?: Priority;
   status?: ResultStatus;
+  /** Spec §9: the new `reviewState` filter. Absent means "the default list", which includes drafts. */
+  reviewState?: ReviewState;
   q?: string;
   page: number;
   pageSize: number;
@@ -27,7 +32,9 @@ export interface CaseFilters {
 export const caseKeys = {
   all: (projectId: string) => ['cases', projectId] as const,
   list: (projectId: string, filters: CaseFilters) => ['cases', projectId, 'list', filters] as const,
+  draftCount: (projectId: string) => ['cases', projectId, 'draft-count'] as const,
   detail: (id: string) => ['case', id] as const,
+  suggestion: (caseId: string) => ['case', caseId, 'suggestion'] as const,
   modules: (projectId: string) => ['modules', projectId] as const,
 };
 
@@ -54,6 +61,77 @@ function useInvalidateCases(projectId: string) {
       queryClient.invalidateQueries({ queryKey: projectKeys.all }),
       queryClient.invalidateQueries({ queryKey: projectKeys.dashboard }),
     ]);
+}
+
+/** The "AI drafts (N)" chip count (spec §8): one page of one item, read for its `total`. */
+export function useDraftCount(projectId: string) {
+  return useQuery({
+    queryKey: caseKeys.draftCount(projectId),
+    queryFn: () =>
+      api<Paged<TestCaseListItem>>(`/projects/${projectId}/test-cases`, { query: { reviewState: 'AI_DRAFT', page: 1, pageSize: 1 } }),
+    select: (data) => data.total,
+    enabled: !!projectId,
+  });
+}
+
+/** 404/409 means the draft was approved or rejected somewhere else: refresh so the UI stops offering it. */
+function useRefreshOnStale(projectId: string) {
+  const invalidate = useInvalidateCases(projectId);
+  return (e: unknown) => {
+    if (e instanceof ApiError && (e.status === 404 || e.status === 409)) void invalidate();
+  };
+}
+
+/** Spec §9: POST /test-cases/:id/approve. */
+export function useApproveCase(projectId: string) {
+  const invalidate = useInvalidateCases(projectId);
+  const onStale = useRefreshOnStale(projectId);
+  return useMutation({
+    mutationFn: (id: string) => api<TestCase>(`/test-cases/${id}/approve`, { method: 'POST' }),
+    onSuccess: invalidate,
+    onError: onStale,
+  });
+}
+
+/** Spec §9: POST /test-cases/approve with `{ ids }`. Valid ids are approved even when some fail (spec §6). */
+export function useApproveCases(projectId: string) {
+  const invalidate = useInvalidateCases(projectId);
+  const onStale = useRefreshOnStale(projectId);
+  return useMutation({
+    mutationFn: (ids: string[]) => api<BulkApproveResult>('/test-cases/approve', { method: 'POST', body: { ids } }),
+    onSuccess: invalidate,
+    onError: onStale,
+  });
+}
+
+/** Spec §9: GET /test-cases/:id/suggestion — the one pending suggestion, or null. */
+export function useSuggestion(caseId: string) {
+  return useQuery({
+    queryKey: caseKeys.suggestion(caseId),
+    // The API answers `null` (or 204) when there is nothing pending; React Query forbids `undefined`.
+    queryFn: async () => (await api<TestCaseSuggestion | null>(`/test-cases/${caseId}/suggestion`)) ?? null,
+    enabled: !!caseId,
+  });
+}
+
+/** Spec §9: POST /suggestions/:id/accept — 409 when the case changed since the suggestion (spec §6). */
+export function useAcceptSuggestion(projectId: string) {
+  const invalidate = useInvalidateCases(projectId);
+  const onStale = useRefreshOnStale(projectId);
+  return useMutation({
+    mutationFn: (suggestionId: string) => api<TestCase>(`/suggestions/${suggestionId}/accept`, { method: 'POST' }),
+    onSuccess: invalidate,
+    onError: onStale,
+  });
+}
+
+/** Spec §9: POST /suggestions/:id/reject. */
+export function useRejectSuggestion(projectId: string) {
+  const invalidate = useInvalidateCases(projectId);
+  return useMutation({
+    mutationFn: (suggestionId: string) => api<void>(`/suggestions/${suggestionId}/reject`, { method: 'POST' }),
+    onSuccess: invalidate,
+  });
 }
 
 export function useCreateCase(projectId: string) {
