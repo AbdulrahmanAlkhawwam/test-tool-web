@@ -89,9 +89,12 @@ describe('review hooks', () => {
     expect(invalidate).toHaveBeenCalledWith({ queryKey: caseKeys.all('p1') });
   });
 
-  it('reads the pending suggestion, tolerates no-suggestion answers, and reports a stale accept', async () => {
+  it('reads the pending suggestion, tolerates a real empty no-suggestion response, and reports a stale accept', async () => {
+    // Nest sends no body at all for a handler returning `null` — not the JSON text "null". A mock built
+    // from `json(200, null)` would pass even if the client only tolerated an explicit JSON `null`, so use
+    // the true empty-body shape here (the next test below keeps the explicit-JSON-`null` case covered).
     mockRoutes({
-      'GET /test-cases/c1/suggestion': () => json(200, null),
+      'GET /test-cases/c1/suggestion': () => new Response(null, { status: 200 }),
       'POST /suggestions/s1/accept': () => apiError(409, 'The test case changed since this suggestion – review it again'),
       'POST /suggestions/s1/reject': () => new Response(null, { status: 204 }),
     });
@@ -116,5 +119,12 @@ describe('review hooks', () => {
     await act(async () => {
       await result.current.reject.mutateAsync('s1');
     });
+  });
+
+  it('also reads an explicit JSON `null` as no pending suggestion', async () => {
+    mockRoutes({ 'GET /test-cases/c1/suggestion': () => json(200, null) });
+    const { result } = renderHook(() => useSuggestion('c1'), { wrapper: createWrapper().wrapper });
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+    expect(result.current.data).toBeNull();
   });
 });

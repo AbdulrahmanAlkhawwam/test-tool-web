@@ -61,7 +61,9 @@ export function SuggestionPanel({ caseId, projectId }: { caseId: string; project
     }
   }
 
-  if (!suggestion || suggestion.status !== 'PENDING') return null;
+  // The API's current select clause omits `status` entirely, so treat it tolerantly: render whenever
+  // there's a suggestion, unless the API explicitly says it's no longer pending.
+  if (!suggestion || (suggestion.status && suggestion.status !== 'PENDING')) return null;
   const fields = FIELD_ORDER.filter((field) => suggestion.changes[field]);
   const busy = accept.isPending || reject.isPending;
 

@@ -75,6 +75,16 @@ describe('SuggestionPanel', () => {
     expect(screen.getByRole('button', { name: 'Accept' })).toBeEnabled();
   });
 
+  it('renders when the API omits `status` entirely, the shape it actually sends today', async () => {
+    // The real endpoint's select clause is `{ id, changes, rationale, createdAt, createdBy }` — no
+    // `status`, no `testCaseId`. The panel must not depend on either (regression test for the dead panel).
+    const { id, changes, rationale, createdBy, createdAt } = suggestion();
+    mockRoutes({ 'GET /test-cases/c1/suggestion': { id, changes, rationale, createdBy, createdAt } });
+    renderWithClient(<SuggestionPanel caseId="c1" projectId="p1" />);
+
+    expect(await screen.findByRole('heading', { name: 'Suggested changes by AI' })).toBeInTheDocument();
+  });
+
   it('shows nothing when there is no pending suggestion, and disappears after Reject', async () => {
     const { toast } = await import('sonner');
     let rejected = false;

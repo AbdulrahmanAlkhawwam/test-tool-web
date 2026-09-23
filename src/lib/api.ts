@@ -108,7 +108,14 @@ async function authorizedFetch(path: string, opts: RequestOptions): Promise<Resp
 export async function api<T>(path: string, opts: RequestOptions = {}): Promise<T> {
   const res = await authorizedFetch(path, opts);
   if (res.status === 204) return undefined as T;
-  return (await res.json()) as T;
+  // Nest sends no body at all for a handler that returns `null` (e.g. "no pending suggestion"), not the
+  // text "null" — plain `res.json()` throws a SyntaxError on that empty body, which isn't an ApiError, so
+  // callers (and React Query's retry) can't tell it apart from a real failure. Read as text first and treat
+  // an empty body as `undefined`, the same as a 204; a real JSON payload (including the literal `null`)
+  // parses normally.
+  const text = await res.text();
+  if (text === '') return undefined as T;
+  return JSON.parse(text) as T;
 }
 
 /** Downloads an authorized file (e.g. an .xlsx export) and saves it in the browser. */

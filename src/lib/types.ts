@@ -506,12 +506,17 @@ export interface SuggestionChange {
 
 export type SuggestionStatus = 'PENDING' | 'ACCEPTED' | 'REJECTED';
 
-/** GET /test-cases/:id/suggestion — the one pending suggestion, or null (spec §6, §9). */
+/**
+ * GET /test-cases/:id/suggestion — the one pending suggestion, or null (spec §6, §9).
+ * `status` and `testCaseId` are optional: the endpoint's current select clause omits both, so a response
+ * only ever carries a pending suggestion in practice. Never gate on their absence meaning something other
+ * than "pending" — see `SuggestionPanel`, which renders unless `status` is present and not `PENDING`.
+ */
 export interface TestCaseSuggestion {
   id: string;
-  testCaseId: string;
+  testCaseId?: string;
   changes: Partial<Record<SuggestionField, SuggestionChange>>;
-  status: SuggestionStatus;
+  status?: SuggestionStatus;
   rationale: string | null;
   createdBy: UserRef;
   createdAt: string;

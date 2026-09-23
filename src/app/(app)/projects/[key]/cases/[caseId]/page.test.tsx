@@ -13,7 +13,8 @@ vi.mock('next/navigation', () => ({ useRouter: () => ({ push }) }));
 const base = {
   'GET /projects/NINJA': caseProject,
   'GET /projects/p1/modules': caseProject.modules,
-  'GET /test-cases/c1/suggestion': () => json(200, null),
+  // The real API sends no body at all for "no pending suggestion" — not the JSON text "null".
+  'GET /test-cases/c1/suggestion': () => new Response(null, { status: 200 }),
 };
 
 const render = () => renderWithClient(<CaseDetailPage params={{ key: 'NINJA', caseId: 'c1' }} />);

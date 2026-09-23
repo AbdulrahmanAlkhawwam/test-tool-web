@@ -49,6 +49,19 @@ describe('api client', () => {
     await expect(api('/x', { method: 'DELETE' })).resolves.toBeUndefined();
   });
 
+  it('returns undefined for a 200 with an empty body, instead of throwing on res.json()', async () => {
+    // This is what Nest actually sends for a handler that returns `null` (e.g. "no pending suggestion") —
+    // no body at all, not the text "null". Plain `res.json()` throws a SyntaxError on that, which isn't an
+    // ApiError, so callers (and React Query's retry) can't tell it apart from a real failure.
+    fetchMock.mockResolvedValueOnce(new Response(null, { status: 200 }));
+    await expect(api('/x')).resolves.toBeUndefined();
+  });
+
+  it('still parses a real 200 JSON body, including an explicit `null`', async () => {
+    fetchMock.mockResolvedValueOnce(json(200, null));
+    await expect(api('/x')).resolves.toBeNull();
+  });
+
   it('throws ApiError with the server message and details', async () => {
     fetchMock.mockResolvedValueOnce(
       json(400, { statusCode: 400, error: 'Bad Request', message: 'Validation failed', details: ['name should not be empty'] }),
