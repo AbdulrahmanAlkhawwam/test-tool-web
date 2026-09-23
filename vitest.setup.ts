@@ -25,3 +25,17 @@ for (const name of ['hasPointerCapture', 'setPointerCapture', 'releasePointerCap
     Object.defineProperty(Element.prototype, name, { value: () => undefined, writable: true, configurable: true });
   }
 }
+
+// jsdom has no ResizeObserver. Radix primitives that measure themselves (Checkbox's indicator, Popper)
+// construct one, so a component reaching that code path would throw in a test without this.
+if (!('ResizeObserver' in globalThis)) {
+  Object.defineProperty(globalThis, 'ResizeObserver', {
+    value: class {
+      observe() {}
+      unobserve() {}
+      disconnect() {}
+    },
+    writable: true,
+    configurable: true,
+  });
+}
