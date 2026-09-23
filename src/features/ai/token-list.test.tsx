@@ -84,4 +84,38 @@ describe('TokenList', () => {
     await waitFor(() => expect(toast.error).toHaveBeenCalledWith('Token not found'));
     expect(screen.getByText('Active')).toBeInTheDocument();
   });
+
+  it('disables the confirm dialog buttons while the revoke is in flight', async () => {
+    let resolveDelete!: () => void;
+    mockRoutes({
+      'GET /users/me/tokens': [apiToken()],
+      'DELETE /users/me/tokens/t1': () =>
+        new Promise((resolve) => {
+          resolveDelete = () => resolve(new Response(null, { status: 204 }));
+        }),
+    });
+    const user = userEvent.setup();
+    renderWithClient(<TokenList />);
+
+    await user.click(await screen.findByRole('button', { name: 'Revoke Amina laptop' }));
+    await user.click(await screen.findByRole('button', { name: 'Revoke' }));
+
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Working…' })).toBeDisabled());
+    expect(screen.getByRole('button', { name: 'Cancel' })).toBeDisabled();
+
+    resolveDelete();
+    await waitFor(() => expect(screen.queryByRole('button', { name: 'Working…' })).not.toBeInTheDocument());
+  });
+
+  it('renders a token that is both revoked and past its expiry as revoked, with no Revoke offered', async () => {
+    mockRoutes({
+      'GET /users/me/tokens': [apiToken({ expiresAt: '2020-01-01T00:00:00.000Z', revokedAt: '2020-06-01T00:00:00.000Z' })],
+    });
+    renderWithClient(<TokenList />);
+
+    expect(await screen.findByText('Revoked')).toBeInTheDocument();
+    expect(screen.queryByText('Expired')).not.toBeInTheDocument();
+    expect(screen.queryByText('Active')).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Revoke Amina laptop' })).not.toBeInTheDocument();
+  });
 });
