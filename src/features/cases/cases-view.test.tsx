@@ -1,4 +1,4 @@
-import { screen, waitFor } from '@testing-library/react';
+import { act, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { apiError, mockRoutes, type MockCall } from '@/test/fetch-routes';
@@ -142,5 +142,49 @@ describe('CasesView — AI drafts', () => {
     // An exact string, not a regex: a substring regex also matches the bar's wrapper element.
     await waitFor(() => expect(screen.queryByText('1 AI draft selected')).not.toBeInTheDocument());
     expect(screen.queryByRole('button', { name: 'Approve selected' })).not.toBeInTheDocument();
+  });
+
+  it('drops a selected row that comes back approved while still on the page, with no checkbox left to clear it', async () => {
+    let approvedNow = false;
+    mockRoutes({
+      ...modulesRoute,
+      'GET /projects/p1/test-cases': (call) => {
+        if (call.query.pageSize === '1') return pagedCases([], { total: approvedNow ? 0 : 1, pageSize: 1 });
+        const row = approvedNow ? caseItem('c1', 'TC-AUTH-001') : draft;
+        return pagedCases([row, approved]);
+      },
+    });
+    const user = userEvent.setup();
+    const { queryClient } = renderWithClient(<CasesView project={caseProject} />);
+
+    await user.click(await screen.findByRole('checkbox', { name: 'Select TC-AUTH-001' }));
+    expect(await screen.findByText('1 AI draft selected')).toBeInTheDocument();
+
+    // Someone else (another tester, or the AI accepting its own suggestion) approves the same case; the
+    // list refetches with the row still on screen but no longer a draft.
+    approvedNow = true;
+    await act(async () => {
+      await queryClient.invalidateQueries({ queryKey: ['cases'] });
+    });
+
+    await waitFor(() => expect(screen.queryByText(/AI draft(s)? selected/)).not.toBeInTheDocument());
+    expect(screen.queryByRole('checkbox', { name: 'Select TC-AUTH-001' })).not.toBeInTheDocument();
+  });
+
+  it('shows the header checkbox as indeterminate when only some drafts on the page are selected', async () => {
+    mockRoutes({
+      ...modulesRoute,
+      'GET /projects/p1/test-cases': casesRoute({ '1': pagedCases([draft, draft2, approved]) }, 2),
+    });
+    const user = userEvent.setup();
+    renderWithClient(<CasesView project={caseProject} />);
+
+    await user.click(await screen.findByRole('checkbox', { name: 'Select TC-AUTH-001' }));
+
+    const headerCheckbox = screen.getByRole('checkbox', { name: 'Select all AI drafts on this page' });
+    expect(headerCheckbox).toHaveAttribute('aria-checked', 'mixed');
+
+    await user.click(await screen.findByRole('checkbox', { name: 'Select TC-AUTH-002' }));
+    expect(headerCheckbox).toHaveAttribute('aria-checked', 'true');
   });
 });

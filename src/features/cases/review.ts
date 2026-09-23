@@ -36,10 +36,15 @@ export function summarizeApproval(ids: string[], result: BulkApproveResult | und
   return { approved: reported.filter((id) => !failedIds.has(id)).length, failed };
 }
 
-/** The toast text after a bulk approve. Never says "approved" without naming the failures. */
+/**
+ * The toast text after a bulk approve. Never says "approved" without naming the failures, and never
+ * silently drops all but the first failure — with more than one, it leads with the count and gives the
+ * first message as an example, so the toast stays a single readable line either way.
+ */
 export function approvalMessage(summary: ApprovalSummary): string {
   const { approved, failed } = summary;
   if (!failed.length) return `${approved} ${approved === 1 ? 'draft' : 'drafts'} approved`;
-  if (!approved) return `Could not approve: ${failed[0].message}`;
-  return `${approved} approved, ${failed.length} failed: ${failed[0].message}`;
+  if (!approved) return failed.length === 1 ? `Could not approve: ${failed[0].message}` : `Could not approve: ${failed.length} failed, e.g. ${failed[0].message}`;
+  const failedText = failed.length === 1 ? `1 failed: ${failed[0].message}` : `${failed.length} failed, e.g. ${failed[0].message}`;
+  return `${approved} approved, ${failedText}`;
 }

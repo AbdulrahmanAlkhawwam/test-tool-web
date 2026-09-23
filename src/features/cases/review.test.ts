@@ -49,4 +49,14 @@ describe('approvalMessage', () => {
     expect(approvalMessage({ approved: 0, failed: [{ id: 'c2', message: 'Already approved' }] })).toBe('Could not approve: Already approved');
     expect(approvalMessage({ approved: 3, failed: [{ id: 'c2', message: 'Already approved' }] })).toBe('3 approved, 1 failed: Already approved');
   });
+
+  it('summarizes several failures with a count and the first message, instead of only the first', () => {
+    const failed = [
+      { id: 'c1', message: 'TC-AUTH-001 was already approved' },
+      { id: 'c2', message: 'TC-AUTH-002 was deleted' },
+      { id: 'c3', message: 'TC-AUTH-003 changed since it was read' },
+    ];
+    expect(approvalMessage({ approved: 0, failed })).toBe('Could not approve: 3 failed, e.g. TC-AUTH-001 was already approved');
+    expect(approvalMessage({ approved: 2, failed })).toBe('2 approved, 3 failed, e.g. TC-AUTH-001 was already approved');
+  });
 });

@@ -13,7 +13,7 @@ import { CaseFilters } from './case-filters';
 import { CaseFormDialog } from './case-form-dialog';
 import { CaseTable } from './case-table';
 import { ModulesDialog } from './modules-dialog';
-import { approvalMessage, pruneSelection, summarizeApproval } from './review';
+import { approvalMessage, isDraft, pruneSelection, summarizeApproval } from './review';
 
 const PAGE_SIZE = 50;
 
@@ -98,12 +98,14 @@ export function CasesView({ project, actions }: { project: ProjectDetail; action
     if (pageOverflow) setFilters((f) => ({ ...f, page: f.page - 1 }));
   }, [pageOverflow]);
 
-  // Paging or filtering swaps the rows. Drop anything no longer on screen so "Approve selected" can
-  // never send a draft the tester cannot see (pruneSelection returns the same array when nothing changed).
-  const visibleKey = (data?.items ?? []).map((tc) => tc.id).join(',');
+  // Paging or filtering swaps the rows, and a draft can be approved elsewhere (another tester, or the
+  // AI) between refetches. Prune against the visible *draft* ids, not every visible id: once a row is no
+  // longer a draft its checkbox stops rendering, so keying on all ids would leave it selected forever
+  // with nothing on screen able to clear it (pruneSelection returns the same array when nothing changed).
+  const visibleDraftKey = (data?.items ?? []).filter(isDraft).map((tc) => tc.id).join(',');
   useEffect(() => {
-    setSelected((prev) => pruneSelection(prev, visibleKey ? visibleKey.split(',') : []));
-  }, [visibleKey]);
+    setSelected((prev) => pruneSelection(prev, visibleDraftKey ? visibleDraftKey.split(',') : []));
+  }, [visibleDraftKey]);
 
   const from = data && data.total ? (data.page - 1) * data.pageSize + 1 : 0;
   const to = data ? Math.min(data.page * data.pageSize, data.total) : 0;
@@ -126,8 +128,8 @@ export function CasesView({ project, actions }: { project: ProjectDetail; action
       </div>
 
       {selected.length > 0 && (
-        <div role="status" className="flex flex-wrap items-center justify-between gap-3 rounded-md border border-primary/40 bg-primary/5 px-3 py-2 text-sm">
-          <span>
+        <div className="flex flex-wrap items-center justify-between gap-3 rounded-md border border-primary/40 bg-primary/5 px-3 py-2 text-sm">
+          <span role="status">
             {selected.length} AI {selected.length === 1 ? 'draft' : 'drafts'} selected
           </span>
           <div className="flex gap-2">

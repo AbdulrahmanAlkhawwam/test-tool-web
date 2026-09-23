@@ -39,7 +39,9 @@ export function CaseTable({
   approving,
 }: CaseTableProps) {
   const draftIds = items.filter(isDraft).map((tc) => tc.id);
-  const allDraftsSelected = draftIds.length > 0 && draftIds.every((id) => selected.includes(id));
+  const selectedDraftCount = draftIds.filter((id) => selected.includes(id)).length;
+  const allDraftsSelected = draftIds.length > 0 && selectedDraftCount === draftIds.length;
+  const someDraftsSelected = selectedDraftCount > 0 && !allDraftsSelected;
 
   return (
     <div className="overflow-x-auto rounded-lg border bg-card">
@@ -49,7 +51,7 @@ export function CaseTable({
             <TableHead className="w-10">
               <Checkbox
                 aria-label="Select all AI drafts on this page"
-                checked={allDraftsSelected}
+                checked={someDraftsSelected ? 'indeterminate' : allDraftsSelected}
                 disabled={draftIds.length === 0}
                 onCheckedChange={() => onToggleAll(draftIds)}
               />

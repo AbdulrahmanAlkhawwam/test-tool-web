@@ -11,9 +11,13 @@ import { PriorityBadge } from '@/components/priority-badge';
 import { StatusBadge } from '@/components/status-badge';
 import { Button } from '@/components/ui/button';
 import { useCase, useDeleteCase, useModules } from '@/features/cases/api';
+import { AiDraftBadge } from '@/features/cases/ai-draft-badge';
 import { CaseDefinition } from '@/features/cases/case-definition';
 import { CaseFormDialog } from '@/features/cases/case-form-dialog';
 import { CaseHistory } from '@/features/cases/case-history';
+import { DraftBanner } from '@/features/cases/draft-banner';
+import { isDraft } from '@/features/cases/review';
+import { SuggestionPanel } from '@/features/cases/suggestion-panel';
 import { useProject } from '@/features/projects/api';
 import { ApiError } from '@/lib/api';
 import { formatDateTime } from '@/lib/format';
@@ -58,6 +62,8 @@ export default function CaseDetailPage({ params }: { params: { key: string; case
         </p>
       )}
 
+      {isDraft(tc) && !tc.deletedAt && <DraftBanner testCase={tc} projectId={projectId} onRejected={() => router.push(casesHref)} />}
+
       <div className="flex flex-wrap items-start justify-between gap-4">
         <div className="space-y-2">
           <p className="font-mono text-sm text-muted-foreground">{tc.code}</p>
@@ -66,6 +72,7 @@ export default function CaseDetailPage({ params }: { params: { key: string; case
             <span className="text-muted-foreground">{tc.module.name}</span>
             <PriorityBadge priority={tc.priority} />
             <StatusBadge status={latest?.status ?? 'NOT_EXECUTED'} />
+            {isDraft(tc) && <AiDraftBadge />}
           </div>
         </div>
         {!tc.deletedAt && (
@@ -85,9 +92,14 @@ export default function CaseDetailPage({ params }: { params: { key: string; case
       <section className="rounded-xl border bg-card p-5">
         <CaseDefinition testCase={tc} />
         <p className="mt-5 border-t pt-3 text-xs text-muted-foreground">
-          Created by {tc.createdBy.name} on {formatDateTime(tc.createdAt)} · last updated by {tc.updatedBy.name} on {formatDateTime(tc.updatedAt)}
+          Created by {tc.createdBy.name}
+          {tc.createdVia === 'AI' ? ' via AI' : ''} on {formatDateTime(tc.createdAt)} · last updated by {tc.updatedBy.name} on{' '}
+          {formatDateTime(tc.updatedAt)}
+          {tc.approvedBy ? ` · Approved by ${tc.approvedBy.name} on ${formatDateTime(tc.approvedAt ?? null)}` : ''}
         </p>
       </section>
+
+      {!tc.deletedAt && <SuggestionPanel caseId={tc.id} projectId={projectId} />}
 
       <section className="space-y-3">
         <h3 className="font-medium">Result history</h3>
